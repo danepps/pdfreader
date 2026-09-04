@@ -22,6 +22,9 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 if [[ -f "$ROOT/Support/Folio.icns" ]]; then
   cp "$ROOT/Support/Folio.icns" "$APP/Contents/Resources/Folio.icns"
 fi
+if [[ -f "$ROOT/Support/Assets.car" ]]; then
+  cp "$ROOT/Support/Assets.car" "$APP/Contents/Resources/Assets.car"
+fi
 codesign --force --sign - "$APP" >/dev/null 2>&1
 echo "Built $APP"
 

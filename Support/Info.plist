@@ -8,6 +8,8 @@
 	<string>Folio</string>
 	<key>CFBundleIconFile</key>
 	<string>Folio</string>
+	<key>CFBundleIconName</key>
+	<string>Folio</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.epps.Folio</string>
 	<key>CFBundleInfoDictionaryVersion</key>

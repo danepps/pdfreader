@@ -12,8 +12,10 @@ web view, no storyboards. Built because PDF Expert got slow.
 - **Zippy.** Renders through PDFKit, the same engine as Preview. Launches cold in
   well under a second.
 - **Remembers where you were** in each file.
-- Thumbnail sidebar (⌃⌘S), find with highlights (⌘F, ⌘G / ⇧⌘G), go to page
-  (⌥⌘G), zoom (⌘= / ⌘- / ⌘0 fit / ⌘1 actual), back/forward (⌘[ / ⌘]), print.
+- Arrow keys always page: ↑/← previous, ↓/→ next, ⌘↑/⌘↓ first/last.
+- Thumbnail sidebar (⌃⌘S), find with a hit counter and green highlights (⌘F,
+  ⌘G / ⇧⌘G), go to page (⌥⌘G), zoom (⌘= / ⌘- / ⌘0 fit / ⌘1 actual),
+  back/forward (⌘[ / ⌘]), print.
 
 ## Build
 
@@ -34,7 +36,7 @@ right-click a PDF ▸ Get Info ▸ Open With to make it the default.
 ```
 Package.swift                 Swift Package (single executable target)
 Support/Info.plist            bundle metadata, PDF document type
-Support/Folio.icns            app icon (regenerate with scripts/make-icon.sh)
+Support/Folio.icon, .icns, Assets.car   app icon sources and compiled variants
 build.sh                      assembles the .app bundle
 Sources/Folio/
   main.swift                  NSApplication bootstrap
@@ -44,15 +46,26 @@ Sources/Folio/
   ReaderWindowController.swift  window, toolbar, tabs, find, page field
   ReaderViewController.swift  the PDFView and dark-mode handling
   SidebarViewController.swift thumbnail sidebar
-  ReaderPage.swift            PDFPage subclass that inverts page colors
+  ReaderPage.swift            PDFPage subclass that draws dark-mode find highlights
   Prefs.swift                 UserDefaults-backed settings and reading positions
 ```
 
 ## How the dark-mode inversion works
 
-`ReaderPage` overrides `draw(with:to:)`: it paints opaque white paper, draws the
-page normally, then fills the page with a light gray using the `.difference`
-blend mode. White paper becomes near-black and black ink becomes light gray, in
-a single blend pass per tile, so it costs nothing noticeable. Colored content is
-complemented (blue links turn orange-ish; photos look like negatives), which is
-why the toggle exists.
+The PDF view gets two Core Image filters on its layer: `CIColorInvert` followed
+by a 180° `CIHueAdjust`. Together they flip luminance while preserving hue, so
+white paper becomes black, black text becomes white, and blue links stay blue.
+The GPU applies the filters at composite time, so there is no white flash while
+tiles render, appearance changes are instant, and printing is untouched. The
+thumbnail sidebar gets the same filters. Colors that must look right *after*
+the filter (the page gutter, the green find highlights) are chosen pre-filter.
+
+Find highlights in dark mode are drawn by `ReaderPage` (a `PDFPage` subclass)
+with a `.screen` blend over each match, which recolors only the glyphs.
+
+## Icon
+
+`Support/Folio.icon` is an Icon Composer package with light and dark
+appearances, compiled by `scripts/make-icon.sh` into `Support/Assets.car`
+(macOS 26 uses it via `CFBundleIconName`). The same script renders
+`Support/Folio.icns` as the fallback for macOS 14 and 15.
