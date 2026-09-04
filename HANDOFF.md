@@ -35,11 +35,12 @@ Dan's stated requirements, all met as of this handoff:
 ## Build, run, test
 
 ```sh
-/Users/dan/ClaudeCode/pdf/build.sh --run     # release build + launch
-/Users/dan/ClaudeCode/pdf/build.sh --debug   # debug config
-/Users/dan/ClaudeCode/pdf/scripts/make-icon.sh   # regenerate icon assets
+./build.sh --run           # release build + launch (run from repo root)
+./build.sh --debug         # debug config
+./scripts/make-icon.sh     # regenerate icon assets
 ```
 
+- Repo lives at `~/ClaudeCode/pdf` on one of Dan's machines and `~/ClaudeCode/pdfreader` on the other; use absolute paths from whichever root you're in.
 - Always run the `.app`, never the bare binary: NSDocument needs Info.plist.
 - Force dark/light without touching system settings:
   `defaults write com.epps.Folio appearance -int 2` (0 system, 1 light,
