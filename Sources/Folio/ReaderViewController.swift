@@ -132,12 +132,16 @@ final class ReaderViewController: NSViewController {
 
     /// Luminance inversion that keeps hues: invert, then rotate hue 180 degrees,
     /// so blue links stay blue instead of turning orange.
-    static let invertFilters: [CIFilter] = {
+    /// CIFilters are mutable objects, so each view gets its own pair rather
+    /// than sharing one static set across windows and the sidebar.
+    static func makeInvertFilters() -> [CIFilter] {
         guard let invert = CIFilter(name: "CIColorInvert"),
               let hue = CIFilter(name: "CIHueAdjust") else { return [] }
         hue.setValue(Float.pi, forKey: "inputAngle")
         return [invert, hue]
-    }()
+    }
+
+    private lazy var invertFilters = Self.makeInvertFilters()
 
     init(document: FolioDocument) {
         self.folioDocument = document
@@ -201,7 +205,7 @@ final class ReaderViewController: NSViewController {
             ? NSColor(white: 0.997, alpha: 1)
             : NSColor(white: dark ? 0.11 : 0.94, alpha: 1)
 
-        pdfView.contentFilters = invert ? Self.invertFilters : []
+        pdfView.contentFilters = invert ? invertFilters : []
         // Inverted, PDFKit's drop shadows become bright halos around every page
         // and a light band at the end of the document.
         pdfView.pageShadowsEnabled = !invert

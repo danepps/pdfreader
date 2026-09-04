@@ -39,6 +39,10 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     private var searchNavControl: NSSegmentedControl?
     private var findInProgress = false
     private var lastQuery = ""
+    /// Set while a cancelled PDFKit search is still winding down: its late
+    /// callbacks are ignored, and `pendingQuery` starts when its end arrives.
+    private var awaitingCancelledFindEnd = false
+    private var pendingQuery: String?
     /// Read once, at init: PDFView posts page-change notifications while it
     /// lays out, and those would otherwise overwrite the stored position with
     /// page 1 before we ever get a chance to restore it.
@@ -109,7 +113,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     /// Keep the sidebar and the find highlights in step with the page inversion.
     private func applyInversion(_ inverted: Bool) {
-        sidebarVC.setContentFilters(inverted ? ReaderViewController.invertFilters : [])
+        sidebarVC.setContentFilters(inverted ? ReaderViewController.makeInvertFilters() : [])
         applyHighlights()
         applyWindowChrome()
     }
@@ -484,7 +488,6 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     private func startFind(_ query: String) {
-        if let pdf = folioDocument.pdf, pdf.isFinding { pdf.cancelFindString() }
         matches.removeAll()
         matchIndex = 0
         searchNavControl?.isEnabled = false
@@ -496,11 +499,40 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         findInProgress = !trimmed.isEmpty
         searchCountLabel.stringValue = ""
 
+        // PDFKit delivers find callbacks asynchronously and does not tag them
+        // with the query, so a search cancelled mid-flight can still report
+        // matches (and its end) after a replacement has begun. Hold the new
+        // query until the old search's end callback arrives, discarding
+        // anything else from it in the meantime. The timer is a safety net in
+        // case PDFKit never reports the end of a cancelled search.
+        if let pdf = folioDocument.pdf, pdf.isFinding {
+            pdf.cancelFindString()
+            pendingQuery = trimmed
+            awaitingCancelledFindEnd = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self, self.awaitingCancelledFindEnd else { return }
+                self.awaitingCancelledFindEnd = false
+                self.startPendingFind()
+            }
+            return
+        }
+        beginFind(trimmed)
+    }
+
+    private func beginFind(_ trimmed: String) {
+        findInProgress = !trimmed.isEmpty
         guard !trimmed.isEmpty, let pdf = folioDocument.pdf else { return }
         pdf.beginFindString(trimmed, withOptions: [.caseInsensitive])
     }
 
+    private func startPendingFind() {
+        guard let query = pendingQuery else { return }
+        pendingQuery = nil
+        beginFind(query)
+    }
+
     func findDidMatch(_ selection: PDFSelection) {
+        guard !awaitingCancelledFindEnd else { return }
         matches.append(selection)
         // Show the first hit immediately; the rest arrive asynchronously.
         // Reassigning the highlight array per match is quadratic on large
@@ -510,6 +542,9 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         if matches.count == 1 {
             showMatch(0)
             applyHighlights()
+            // Stepping is useful as soon as there is something to step through;
+            // it wraps over the results found so far.
+            searchNavControl?.isEnabled = true
         } else {
             scheduleHighlightRefresh()
         }
@@ -517,6 +552,11 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     func findDidEnd() {
+        if awaitingCancelledFindEnd {
+            awaitingCancelledFindEnd = false
+            startPendingFind()
+            return
+        }
         findInProgress = false
         applyHighlights()
         updateSearchCount()
@@ -720,7 +760,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         guard let saved = savedPosition,
               let pdf = pdfView.document,
-              saved.pageIndex > 0 || saved.y != 0,
+              saved.pageIndex > 0 || saved.x != 0 || saved.y != 0,
               saved.pageIndex < pdf.pageCount,
               let page = pdf.page(at: saved.pageIndex)
         else {

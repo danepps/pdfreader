@@ -32,17 +32,44 @@ if [[ "$BRANCH" != main ]]; then
   exit 1
 fi
 
-# The only files allowed to be dirty are the two this script rewrites.
-DIRTY="$(git -C "$ROOT" status --porcelain -- "$ROOT" \
-  ':(exclude)Support/Info.plist' ':(exclude)appcast.xml')"
+# A fully clean tree, so nothing but this script's own edits lands in the
+# release commit.
+DIRTY="$(git -C "$ROOT" status --porcelain)"
 if [[ -n "$DIRTY" ]]; then
   echo "working tree is not clean:" >&2
   echo "$DIRTY" >&2
   exit 1
 fi
 
-if git -C "$ROOT" rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+git -C "$ROOT" fetch -q origin
+if [[ "$(git -C "$ROOT" rev-parse HEAD)" != "$(git -C "$ROOT" rev-parse origin/main)" ]]; then
+  echo "local main differs from origin/main; pull or push first" >&2
+  exit 1
+fi
+
+if git -C "$ROOT" rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null \
+   || git -C "$ROOT" ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
   echo "tag v$VERSION already exists" >&2
+  exit 1
+fi
+
+CURRENT="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ROOT/Support/Info.plist")"
+if [[ "$(printf '%s\n%s\n' "$CURRENT" "$VERSION" | sort -V | tail -1)" != "$VERSION" \
+   || "$CURRENT" == "$VERSION" ]]; then
+  echo "version $VERSION is not newer than the current $CURRENT" >&2
+  exit 1
+fi
+
+if ! gh auth status >/dev/null 2>&1; then
+  echo "gh is not logged in (gh auth login)" >&2
+  exit 1
+fi
+if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "Developer ID Application"; then
+  echo "no Developer ID Application certificate in the keychain" >&2
+  exit 1
+fi
+if ! xcrun notarytool history --keychain-profile notary >/dev/null 2>&1; then
+  echo "notarytool profile 'notary' missing or invalid" >&2
   exit 1
 fi
 
@@ -89,6 +116,11 @@ cp "$STAGE/appcast.xml" "$ROOT/appcast.xml"
 echo "==> appcast.xml updated"
 
 # --- Publish -------------------------------------------------------------
+# If anything below fails part-way, recover with:
+#   git -C "$ROOT" tag -d v$VERSION; git -C "$ROOT" push origin :refs/tags/v$VERSION
+#   gh release delete v$VERSION --repo $REPO --yes        (if it got created)
+#   git -C "$ROOT" reset --hard origin/main
+# then rerun. Nothing is live for users until the final push of main.
 # Order matters: the feed goes live the moment main is pushed (raw
 # githubusercontent), so the release asset must already be downloadable.
 # Push only the tag first, publish the release against it, then push main.

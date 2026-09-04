@@ -94,7 +94,15 @@ enum MainMenu {
 
     private static func editMenu() -> NSMenu {
         let menu = NSMenu(title: "Edit")
+        // Standard items with nil targets: the responder chain (search field,
+        // page field, PDFView) supplies and validates each one.
+        add(menu, "Undo", Selector(("undo:")), key: "z")
+        add(menu, "Redo", Selector(("redo:")), key: "z", modifiers: [.command, .shift])
+        menu.addItem(.separator())
+        add(menu, "Cut", #selector(NSText.cut(_:)), key: "x")
         add(menu, "Copy", #selector(NSText.copy(_:)), key: "c")
+        add(menu, "Paste", #selector(NSText.paste(_:)), key: "v")
+        add(menu, "Delete", #selector(NSText.delete(_:)))
         add(menu, "Select All", #selector(NSText.selectAll(_:)), key: "a")
         menu.addItem(.separator())
         add(menu, "Find…", #selector(ReaderWindowController.focusSearch(_:)), key: "f")

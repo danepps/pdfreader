@@ -37,7 +37,17 @@ Dan's stated requirements, all met as of this handoff:
   `setFrameAutosaveName` is called last because it restores too. First launch
   centres on the widest landscape display. No `preferredContentSize`: the
   window snaps back to it and that broke macOS window tiling.
-- Not yet exercised: an actual Sparkle update (needs two published releases).
+- v1.0.0 released 2026-09-04 (public repo, MIT). Not yet exercised: an
+  actual Sparkle update (needs a second release).
+- Codex (GPT-5) reviewed the code 2026-09-04: `AI Memos/folio-code-review-2026-09-04-Codex-GPT-5.md`.
+  Acted on the same day: find-replacement race (state machine, below),
+  release.sh preflights, full Edit menu, per-view CIFilter instances, LRU
+  eviction of saved positions, build.sh rejects unknown flags, match
+  buttons enable on the first hit. Deferred, in rough priority: a test
+  target + CI, Swift 6 strict-concurrency cleanup (`@MainActor` on UI
+  owners, the PDFKit delegate boundary), incremental highlight geometry
+  during a search (each batch currently rebuilds all line rects), keying
+  saved positions by file identity rather than path, App Sandbox.
 - Not runtime-verified: dark mode at the very last page of a document (the
   bottom-band fix was checked mid-document); the light-mode icon variant
   (would have required toggling Dan's system appearance); Page Up/Down and
@@ -82,7 +92,11 @@ Dan's stated requirements, all met as of this handoff:
 Support/: `Info.plist`, `Folio.icon` (Icon Composer package, light+dark),
 `Assets.car` (compiled from it), `Folio.icns` (fallback). scripts/:
 `make-icon.swift` renders both variants, `make-icon.sh` builds icns +
-`.icon` + runs `actool`.
+`.icon` + runs `actool`. The icon (2026-09-04, drawn by Codex) is a page with
+a folded corner and four coloured margin tabs on a graphite tile; the dark
+variant flips the page to black. `scripts/make-icon-concepts.swift` renders
+the alternatives that were considered into `Support/IconConcepts/` (gitignored,
+~57 MB).
 
 ## Design decisions and why
 
@@ -124,6 +138,12 @@ Support/: `Info.plist`, `Folio.icon` (Icon Composer package, light+dark),
   button and ⌘T.
 - **Page indicator** is one attributed label ("4 of 30") that swaps to an
   editable field on click/⌥⌘G. Two-control versions were never centered.
+- **Replacing a search while one is running** goes through a small state
+  machine in `ReaderWindowController.startFind`: PDFKit's find callbacks
+  carry no query identity and arrive asynchronously, so the old search is
+  cancelled, `awaitingCancelledFindEnd` drops its stragglers, and the new
+  query starts from the old search's end callback (or a 0.5s fallback
+  timer). Without this a stale match or end could land in the new results.
 - **Hit counter** is a separate toolbar item after the search field,
   centered, `visibilityPriority = .high`; search field 180pt so nothing
   overflows at the default width. The previous/next segmented control sits
@@ -167,8 +187,13 @@ that zip beside a copy of the live `appcast.xml` and runs Sparkle's
 `generate_appcast` over the staging directory so new entries merge into the old
 ones, copies the feed back, then commits, tags `v<version>`, pushes the tag,
 runs `gh release create` (so the asset exists), and only then pushes `main`
-(which is what makes the feed live). Don't hand-run the pieces; the appcast
-signature and the download URL prefix have to agree with the tag.
+(which is what makes the feed live). Preflight refuses a dirty tree, a
+`main` that differs from `origin/main`, an existing tag, a version not newer
+than the current one, or missing `gh`/certificate/notary credentials. If it
+fails after the tag push, the recovery commands are in a comment above the
+publish step (delete the tag locally and remotely, delete the GitHub release
+if it exists, `reset --hard origin/main`, rerun). Don't hand-run the pieces;
+the appcast signature and the download URL prefix have to agree with the tag.
 
 ### Setting up the MacBook
 

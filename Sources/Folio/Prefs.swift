@@ -53,19 +53,34 @@ enum Prefs {
         var y: CGFloat
     }
 
+    /// Entries are `[page, x, y, lastAccessed]`; older three-element entries
+    /// still read (and are treated as least recently used).
     static func lastPosition(for url: URL) -> Position? {
         let table = defaults.dictionary(forKey: Key.lastPositions) ?? [:]
-        guard let raw = table[url.path] as? [Double], raw.count == 3 else { return nil }
+        guard let raw = table[url.path] as? [Double], raw.count >= 3 else { return nil }
         return Position(pageIndex: Int(raw[0]), x: raw[1], y: raw[2])
     }
 
+    private static let maxPositions = 500
+
     static func setLastPosition(_ position: Position, for url: URL) {
         var table = defaults.dictionary(forKey: Key.lastPositions) ?? [:]
-        table[url.path] = [Double(position.pageIndex), Double(position.x), Double(position.y)]
-        // Keep the table from growing without bound: drop arbitrary entries past 500.
-        if table.count > 500 {
-            for key in table.keys.prefix(table.count - 500) { table.removeValue(forKey: key) }
+        table[url.path] = [Double(position.pageIndex), Double(position.x), Double(position.y),
+                           Date().timeIntervalSinceReferenceDate]
+        // Keep the table bounded by evicting the least recently used entries.
+        if table.count > maxPositions {
+            let byAge = table.keys.sorted { lhs, rhs in
+                accessStamp(table[lhs]) < accessStamp(table[rhs])
+            }
+            for key in byAge.prefix(table.count - maxPositions) {
+                table.removeValue(forKey: key)
+            }
         }
         defaults.set(table, forKey: Key.lastPositions)
+    }
+
+    private static func accessStamp(_ raw: Any?) -> Double {
+        guard let values = raw as? [Double], values.count >= 4 else { return 0 }
+        return values[3]
     }
 }

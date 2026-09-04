@@ -12,9 +12,15 @@ for arg in "$@"; do
     --debug) CONFIG=debug ;;
     --adhoc) ADHOC=1 ;;   # skip Developer ID signing (faster, offline)
     --notarize) NOTARIZE=1 ;;   # submit to Apple, wait, staple (needs "notary" keychain profile)
+    *) echo "unknown option: $arg (use --run, --debug, --adhoc, --notarize)" >&2; exit 2 ;;
   esac
 done
 NOTARIZE=${NOTARIZE:-0}
+if [[ $NOTARIZE -eq 1 && ( $ADHOC -eq 1 || "$CONFIG" != release ) ]]; then
+  echo "--notarize requires a Developer ID release build (no --adhoc, no --debug)" >&2
+  exit 2
+fi
+echo "==> $CONFIG build, $([[ $ADHOC -eq 1 ]] && echo ad-hoc || echo 'Developer ID') signing$([[ $NOTARIZE -eq 1 ]] && echo ', notarize')"
 
 swift build -c "$CONFIG" --package-path "$ROOT"
 

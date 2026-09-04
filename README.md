@@ -20,7 +20,7 @@ web view, no storyboards. Built because PDF Expert got slow.
 ## Build
 
 Requires Xcode (or the command-line tools with a Swift 5.9+ toolchain) on
-macOS 14 or later.
+macOS 14 or later, Apple Silicon only (the build is arm64; a universal binary would need `lipo` in `build.sh`).
 
 ```sh
 ./build.sh          # builds build/Folio.app
