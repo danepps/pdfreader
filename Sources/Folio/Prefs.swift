@@ -2,6 +2,11 @@ import AppKit
 
 extension Notification.Name {
     static let folioPrefsChanged = Notification.Name("FolioPrefsChanged")
+    /// Posted by a FolioDocument (as `object`) once a new PDFDocument has taken
+    /// the place of the old one -- the first Markdown render, a reload after the
+    /// file changed on disk, or a typography change. `userInfo["initial"]` is
+    /// true for the first render of a window.
+    static let folioDocumentDidReplacePDF = Notification.Name("FolioDocumentDidReplacePDF")
 }
 
 enum AppearanceMode: Int {
@@ -16,6 +21,31 @@ enum AppearanceMode: Int {
     }
 }
 
+/// Body typeface for rendered Markdown.
+enum MarkdownTypeface: Int, CaseIterable {
+    case newYork = 0, sanFrancisco = 1, georgia = 2, timesNewRoman = 3
+
+    var title: String {
+        switch self {
+        case .newYork: return "New York"
+        case .sanFrancisco: return "San Francisco"
+        case .georgia: return "Georgia"
+        case .timesNewRoman: return "Times New Roman"
+        }
+    }
+
+    /// WebKit resolves `ui-serif` to New York and `-apple-system` to
+    /// San Francisco on macOS; the named fallbacks cover everything else.
+    var cssFontFamily: String {
+        switch self {
+        case .newYork: return "ui-serif, \"New York\", Georgia, serif"
+        case .sanFrancisco: return "-apple-system, system-ui, sans-serif"
+        case .georgia: return "Georgia, serif"
+        case .timesNewRoman: return "\"Times New Roman\", Times, serif"
+        }
+    }
+}
+
 /// User preferences. Small on purpose; everything defaults to "follow the system".
 enum Prefs {
     private static let defaults = UserDefaults.standard
@@ -24,7 +54,12 @@ enum Prefs {
         static let invertInDarkMode = "invertInDarkMode"
         static let appearance = "appearance"
         static let lastPositions = "lastPositions"
+        static let markdownTypeface = "markdownTypeface"
+        static let markdownFontSize = "markdownFontSize"
     }
+
+    /// Sizes offered in View ▸ Markdown ▸ Size.
+    static let markdownFontSizes = [10, 11, 12, 13]
 
     /// Render page content light-on-dark when the app is in dark mode. Default on.
     static var invertInDarkMode: Bool {
@@ -41,6 +76,30 @@ enum Prefs {
         set {
             defaults.set(newValue.rawValue, forKey: Key.appearance)
             NSApp.appearance = newValue.nsAppearance
+            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+        }
+    }
+
+    // MARK: Markdown typography
+
+    /// Body typeface for rendered Markdown. Default New York, Apple's system serif.
+    static var markdownTypeface: MarkdownTypeface {
+        get { MarkdownTypeface(rawValue: defaults.integer(forKey: Key.markdownTypeface)) ?? .newYork }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.markdownTypeface)
+            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+        }
+    }
+
+    /// Body point size for rendered Markdown. Default 11.
+    static var markdownFontSize: Int {
+        get {
+            let stored = defaults.integer(forKey: Key.markdownFontSize)
+            return markdownFontSizes.contains(stored) ? stored : 11
+        }
+        set {
+            guard markdownFontSizes.contains(newValue) else { return }
+            defaults.set(newValue, forKey: Key.markdownFontSize)
             NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
         }
     }

@@ -1,5 +1,6 @@
 import AppKit
 import Sparkle
+import UniformTypeIdentifiers
 
 /// Application delegate. Deliberately thin: NSDocumentController does the file
 /// handling, and each window controller owns its own state.
@@ -47,12 +48,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         Prefs.invertInDarkMode.toggle()
     }
 
+    @objc func setMarkdownTypeface(_ sender: NSMenuItem) {
+        guard let typeface = MarkdownTypeface(rawValue: sender.tag) else { return }
+        Prefs.markdownTypeface = typeface
+    }
+
+    @objc func setMarkdownFontSize(_ sender: NSMenuItem) {
+        Prefs.markdownFontSize = sender.tag
+    }
+
+    /// Hand LaunchServices this copy of Folio as the handler for .md files.
+    @objc func makeDefaultMarkdownApp(_ sender: NSMenuItem) {
+        NSWorkspace.shared.setDefaultApplication(
+            at: Bundle.main.bundleURL,
+            toOpen: FolioDocument.markdownType
+        ) { error in
+            guard let error else { return }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let alert = NSAlert(error: error)
+                    alert.messageText = "Could not make Folio the default Markdown app."
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    /// True when the Markdown handler LaunchServices reports is this app. The
+    /// comparison is by bundle identifier, not path: the copy in build/ and the
+    /// copy in /Applications are the same app as far as the user is concerned.
+    private var isDefaultMarkdownApp: Bool {
+        guard let handler = NSWorkspace.shared.urlForApplication(toOpen: FolioDocument.markdownType),
+              let identifier = Bundle(url: handler)?.bundleIdentifier
+        else { return false }
+        return identifier == Bundle.main.bundleIdentifier
+    }
+
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
         case #selector(setAppearance(_:)):
             menuItem.state = (menuItem.tag == Prefs.appearance.rawValue) ? .on : .off
         case #selector(toggleInvertInDarkMode(_:)):
             menuItem.state = Prefs.invertInDarkMode ? .on : .off
+        case #selector(setMarkdownTypeface(_:)):
+            menuItem.state = (menuItem.tag == Prefs.markdownTypeface.rawValue) ? .on : .off
+        case #selector(setMarkdownFontSize(_:)):
+            menuItem.state = (menuItem.tag == Prefs.markdownFontSize) ? .on : .off
+        case #selector(makeDefaultMarkdownApp(_:)):
+            menuItem.state = isDefaultMarkdownApp ? .on : .off
         default:
             break
         }

@@ -49,6 +49,16 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     private let savedPosition: Prefs.Position?
     private var restoreStarted = false
     private var restoreFinished = false
+    /// Set while re-running a find after the document was swapped underneath us:
+    /// the first match must not steal the reading position we just restored.
+    private var suppressFirstMatchScroll = false
+    /// The page indicator's fixed width, which has to grow or shrink when a
+    /// Markdown re-render changes the page count.
+    private var pageIndicatorWidth: NSLayoutConstraint?
+    /// Where the last install aimed. A burst of saves can land a second render
+    /// while the first install's two-pass jump is still in flight, and the live
+    /// destination is meaningless at that moment; this is what to aim at instead.
+    private var lastInstallTarget: Prefs.Position?
 
     private var pdfView: ReaderPDFView { readerVC.pdfView }
     private var pageCount: Int { folioDocument.pdf?.pageCount ?? 0 }
@@ -103,6 +113,14 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
             selector: #selector(pageChanged),
             name: .PDFViewPageChanged,
             object: pdfView
+        )
+        // Markdown documents get their PDF asynchronously, and again on every
+        // reload; this is the one place a new document is installed.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(documentDidReplacePDF(_:)),
+            name: .folioDocumentDidReplacePDF,
+            object: document
         )
     }
 
@@ -277,12 +295,12 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         // Fixed width, sized for the widest string this document can show, so
         // the capsule never resizes while paging; the label centres inside it.
-        let widest = "\(max(pageCount, 1)) of \(max(pageCount, 1))"
-            .size(withAttributes: [.font: indicatorFont]).width
+        let width = container.widthAnchor.constraint(equalToConstant: indicatorWidth(for: pageCount))
+        pageIndicatorWidth = width
 
         NSLayoutConstraint.activate([
             container.heightAnchor.constraint(equalToConstant: 22),
-            container.widthAnchor.constraint(equalToConstant: ceil(widest) + 20),
+            width,
 
             pageLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
             pageLabel.centerYAnchor.constraint(equalTo: container.centerYAnchor),
@@ -303,6 +321,12 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         item.isBordered = true
         item.visibilityPriority = .high
         return item
+    }
+
+    private func indicatorWidth(for pageCount: Int) -> CGFloat {
+        let widest = "\(max(pageCount, 1)) of \(max(pageCount, 1))"
+            .size(withAttributes: [.font: indicatorFont]).width
+        return ceil(widest) + 20
     }
 
     private var currentPageNumber: Int? {
@@ -487,7 +511,8 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         sender.selectedSegment == 0 ? findPrevious(sender) : findNext(sender)
     }
 
-    private func startFind(_ query: String) {
+    private func startFind(_ query: String, suppressFirstScroll: Bool = false) {
+        suppressFirstMatchScroll = suppressFirstScroll
         matches.removeAll()
         matchIndex = 0
         searchNavControl?.isEnabled = false
@@ -540,7 +565,13 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         // they appear within ~150ms of being found rather than only when the
         // whole search ends.
         if matches.count == 1 {
-            showMatch(0)
+            if suppressFirstMatchScroll {
+                // Re-running the query after a reload: light the matches up but
+                // stay where the reader was.
+                suppressFirstMatchScroll = false
+            } else {
+                showMatch(0)
+            }
             applyHighlights()
             // Stepping is useful as soon as there is something to step through;
             // it wraps over the results found so far.
@@ -756,6 +787,10 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private func restorePositionIfNeeded() {
         guard !restoreStarted else { return }
+        // A Markdown document has no PDF yet when its window is shown. Leave
+        // restoreStarted false: the first render posts
+        // .folioDocumentDidReplacePDF and installDocument does the restore.
+        guard pdfView.document != nil else { return }
         restoreStarted = true
 
         guard let saved = savedPosition,
@@ -770,23 +805,105 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
 
         let destination = PDFDestination(page: page, at: NSPoint(x: saved.x, y: saved.y))
+        jump(to: destination, expectingPageIndex: saved.pageIndex) { [weak self] in
+            guard let self else { return }
+            self.restoreFinished = true
+            self.updatePageField()
+        }
+    }
 
-        // PDFView silently ignores go(to:) before it has laid the document out,
-        // so force layout and jump on the next runloop pass; then confirm we
-        // actually landed on the saved page and retry once if not.
+    /// PDFView silently ignores go(to:) before it has laid the document out, so
+    /// force layout and jump on the next runloop pass; then confirm we actually
+    /// landed on the expected page and retry once if not.
+    private func jump(to destination: PDFDestination,
+                      expectingPageIndex index: Int,
+                      completion: @escaping () -> Void) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.pdfView.layoutDocumentView()
             self.pdfView.go(to: destination)
 
             DispatchQueue.main.async {
-                let landed = self.pdfView.currentPage.map { pdf.index(for: $0) } ?? NSNotFound
-                if landed != saved.pageIndex {
-                    self.pdfView.go(to: destination)
-                }
-                self.restoreFinished = true
-                self.updatePageField()
+                let landed = self.pdfView.currentPage
+                    .map { self.pdfView.document?.index(for: $0) ?? NSNotFound } ?? NSNotFound
+                if landed != index { self.pdfView.go(to: destination) }
+                completion()
             }
         }
+    }
+
+    // MARK: Document replacement (Markdown render / reload)
+
+    @objc private func documentDidReplacePDF(_ note: Notification) {
+        guard let replacement = folioDocument.pdf else { return }
+        let initial = (note.userInfo?["initial"] as? Bool) ?? false
+        // On a reload, hold the place the reader is actually looking at; on the
+        // first render there is nothing on screen yet, so use the saved one.
+        var target = initial ? savedPosition : lastInstallTarget
+        // restoreFinished is false only while an install's jump is still in
+        // flight, and the view is then somewhere arbitrary; trust the live
+        // destination in every other case.
+        if !initial, restoreFinished,
+           let old = pdfView.document,
+           let destination = pdfView.currentDestination,
+           let page = destination.page {
+            let index = old.index(for: page)
+            if index != NSNotFound {
+                target = Prefs.Position(pageIndex: index,
+                                        x: destination.point.x,
+                                        y: destination.point.y)
+            }
+        }
+        installDocument(replacement, target: target)
+    }
+
+    /// Swap in a freshly rendered PDF, keeping the reading position, the page
+    /// indicator, and any active search.
+    private func installDocument(_ replacement: PDFDocument, target: Prefs.Position?) {
+        // Assigning a document makes PDFView lay out and report page 1; without
+        // this those reports would overwrite the position we are restoring.
+        restoreFinished = false
+
+        // Every PDFSelection we hold points into the document about to go away.
+        if let old = folioDocument.pdf, old !== replacement, old.isFinding {
+            old.cancelFindString()
+        }
+        matches.removeAll()
+        matchIndex = 0
+        findInProgress = false
+        awaitingCancelledFindEnd = false
+        pendingQuery = nil
+        pdfView.setFindMatches([], current: 0)
+        pdfView.highlightedSelections = nil
+        searchNavControl?.isEnabled = false
+        searchCountLabel.stringValue = ""
+
+        pdfView.document = replacement
+        sidebarVC.documentDidChange()
+        pageIndicatorWidth?.constant = indicatorWidth(for: replacement.pageCount)
+        updatePageField()
+
+        let clamped = target.map {
+            Prefs.Position(pageIndex: min(max($0.pageIndex, 0), max(replacement.pageCount - 1, 0)),
+                           x: $0.x, y: $0.y)
+        }
+        lastInstallTarget = clamped
+        guard let clamped, let page = replacement.page(at: clamped.pageIndex) else {
+            finishInstall()
+            return
+        }
+        let destination = PDFDestination(page: page, at: NSPoint(x: clamped.x, y: clamped.y))
+        jump(to: destination, expectingPageIndex: clamped.pageIndex) { [weak self] in
+            self?.finishInstall()
+        }
+    }
+
+    private func finishInstall() {
+        restoreStarted = true
+        restoreFinished = true
+        updatePageField()
+        // Re-run the search against the new document, without letting match 1
+        // pull the view away from where the reader was.
+        if !lastQuery.isEmpty { startFind(lastQuery, suppressFirstScroll: true) }
     }
 }

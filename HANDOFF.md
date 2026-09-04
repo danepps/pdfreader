@@ -37,6 +37,18 @@ Dan's stated requirements, all met as of this handoff:
   `setFrameAutosaveName` is called last because it restores too. First launch
   centres on the widest landscape display. No `preferredContentSize`: the
   window snaps back to it and that broke macOS window tiling.
+- Markdown viewing landed 2026-09-04 (see "How Markdown viewing works" in
+  README.md and the design decisions below): `.md` files are typeset offscreen
+  by WebKit into a real `PDFDocument`, auto-refresh on disk changes, Export as
+  PDF (⇧⌘E), a default-app menu item, and View ▸ Markdown typeface/size.
+  Runtime-verified: render fidelity (headings, nested and task lists, tables,
+  code blocks, blockquote, inlined local image, blocked remote image, link
+  annotations, New York body + SF Mono code, 1 in margins), auto-refresh across
+  append / atomic rename / truncate-rewrite / delete-and-recreate with the page
+  kept, refresh while a find is active, the typeface and size menu, export of
+  both a Markdown and a PDF document, tabs, and the default-app checkmark.
+  Not verified by machine: the dark-mode *look* of a rendered memo (the pipeline
+  is unaffected, but the colours want a human eye).
 - v1.0.0 and v1.0.1 released 2026-09-04 (public repo, MIT). The Sparkle
   path is proven: the installed 1.0.0 in /Applications picked up 1.0.1 and
   installed it on quit (automatic updates were on, so the download was
@@ -67,6 +79,10 @@ Dan's stated requirements, all met as of this handoff:
 
 - Repo lives at `~/ClaudeCode/pdf` on one of Dan's machines and `~/ClaudeCode/pdfreader` on the other; use absolute paths from whichever root you're in.
 - Always run the `.app`, never the bare binary: NSDocument needs Info.plist.
+- Dependencies are Sparkle and swift-markdown; the latter is pinned by commit
+  (currently `27b7fc1a`) because its manifest depends on swift-cmark by branch.
+  It is source-only Swift + C and links statically, so `build.sh` needs no
+  change for it.
 - Force dark/light without touching system settings:
   `defaults write com.epps.Folio appearance -int 2` (0 system, 1 light,
   2 dark), relaunch, then set back to 0.
@@ -84,7 +100,10 @@ Dan's stated requirements, all met as of this handoff:
 | `main.swift` | NSApplication bootstrap, sets `AppDelegate`. |
 | `AppDelegate.swift` | Installs the menu, applies saved appearance override, shows Open panel on launch/no windows, appearance & invert menu actions. Owns the Sparkle `SPUStandardUpdaterController` (started eagerly, so the scheduled background check runs). |
 | `MainMenu.swift` | Entire menu bar in code. Nil-target actions ride the responder chain (`zoomIn:`, `goToNextPage:` etc. are PDFView's). "Open Recent" is just a submenu with a `clearRecentDocuments:` item; AppKit fills it. "Check for Updates…" is the one item with an explicit target — Sparkle's updater controller isn't in the responder chain, so it's passed in from the app delegate. |
-| `FolioDocument.swift` | `NSDocument` (ObjC name `FolioDocument`, referenced from Info.plist) wrapping `PDFDocument`. `PDFDocumentDelegate`: returns `ReaderPage` for pages, forwards find callbacks to the window controller via `FindSink`. |
+| `FolioDocument.swift` | `NSDocument` (ObjC name `FolioDocument`, referenced from Info.plist) wrapping `PDFDocument`. Two `Kind`s: a PDF is opened directly; a Markdown file is decoded and converted to HTML in `read`, then typeset asynchronously and installed through `.folioDocumentDidReplacePDF`. Owns the `FileWatcher`, the re-render on a typography change, and `exportAsPDF`. `PDFDocumentDelegate`: returns `ReaderPage` for pages, forwards find callbacks to the window controller via `FindSink`. |
+| `MarkdownHTML.swift` | Markdown → HTML. Decode (UTF-8, UTF-16 by BOM), strip YAML front matter, `Markdown.Document` + `HTMLFormatter`, an `ImageInliner` rewriter that turns relative local images into `data:` URIs, and the print stylesheet. Pure Swift, no AppKit, safe off-main. |
+| `MarkdownRenderer.swift` | `@MainActor` singleton. One offscreen `WKWebView` in a never-shown borderless window; serial job queue (a newer job for the same document supersedes a queued one); prints to a temp PDF and hands back `(Data, PDFDocument)`. Tears the web view down 30 s after the last Markdown document closes. |
+| `FileWatcher.swift` | vnode `DispatchSource` on the file *and* its parent directory, 250 ms debounce, `(inode, mtime, size)` gate, reopens the descriptor when the file is replaced or recreated. |
 | `ReaderWindowController.swift` | Window, `NSSplitViewController` (sidebar + reader), unified toolbar, page indicator, search field + hit counter + previous/next match segmented control (⇧⌘G/⌘G equivalents), tabs, reading-position memory, black chrome in dark mode. |
 | `ReaderViewController.swift` | `ReaderPDFView` (PDFView subclass: arrow-key paging, per-page highlight bookkeeping), appearance routine that installs the inversion filters. |
 | `SidebarViewController.swift` | `PDFThumbnailView`, mirrors the inversion filters. |
@@ -146,6 +165,56 @@ the alternatives that were considered into `Support/IconConcepts/` (gitignored,
   cancelled, `awaitingCancelledFindEnd` drops its stragglers, and the new
   query starts from the old search's end callback (or a 0.5s fallback
   timer). Without this a stale match or end could land in the new results.
+- **Markdown is rendered to a real PDF, not shown in a web view.** Every
+  reader feature -- tabs, the dark-mode inversion filter, arrow-key paging, the
+  "N of M" indicator, find with hit counts and green boxes, position memory,
+  printing -- already works on a `PDFDocument`, and a paginated memo is what Dan
+  wants to read. So Markdown becomes HTML and HTML becomes pages; nothing on
+  screen is ever a web view.
+- **WebKit typesets it, offscreen.** swift-markdown ships an `HTMLFormatter`, so
+  there is no HTML emitter to write; CSS gives reliable tables, code blocks and
+  `break-inside: avoid`; and WebKit emits real link annotations. The native
+  alternative (a ~500-line AST-to-`NSAttributedString` renderer around
+  `NSTextTable`, whose printing is the least reliable part of TextKit, with no
+  keep-with-next in TextKit 1) is the documented fallback if the print path ever
+  breaks. It was not needed: the WebKit path worked first try on macOS 26.
+- **The print path is thread-shaped, and that dictates the API.**
+  `WKPrintingView` computes page ranges synchronously only on a secondary print
+  thread; on the main thread it returns an open-ended range and never finishes,
+  which is the cause of every "WKWebView prints a blank page" report.
+  `NSPrintOperation.run()` never spawns that thread. **`runModal(for:delegate:
+  didRun:contextInfo:)` with `canSpawnSeparateThread = true` does**, even with
+  both panels hidden. The exact sequence that works is in
+  `MarkdownRenderer.printLoadedPage()`.
+- **Margins come from `NSPrintInfo`, never from `@page`.** WebKit subtracts the
+  print info's margins itself; setting both doubles them. The stylesheet has no
+  page geometry at all.
+- **The Markdown stylesheet is written for life after the inversion filter.**
+  Same arithmetic as the gutter: the filter is a luminance flip, so code-block
+  and table-header backgrounds are near-whites (`#FAFAFA`, `#F5F5F5`) that come
+  out as dark grays. A `#F2F2F2`-class gray would invert to mid gray and look
+  muddy. Link blue is `#0B57D0`, whose hue survives the 180° rotation.
+- **Images are inlined as data URIs, everything else is blocked.** The page is
+  loaded from a string, so relative image paths would not resolve anyway; the
+  rewriter base64s local images under the document's own folder (8 MB cap) and
+  the CSP (`default-src 'none'; img-src data:; style-src 'unsafe-inline'`) makes
+  sure a render can never touch the network or run script.
+- **Auto-refresh is a vnode watcher, not `NSFilePresenter`.**
+  `presentedItemDidChange` only fires for writers that go through
+  `NSFileCoordinator`, which editors and AI CLIs are not. The watcher also
+  watches the parent directory, because an atomic "write a temp file and rename
+  it into place" save leaves the original vnode untouched and shows up only as a
+  directory write. `presentedItemDidChange` is still overridden, but only to
+  poke the same debounce.
+- **The first Markdown render is "reload #0".** Typesetting takes ~0.3-0.7 s, so
+  `read(from:)` only decodes and converts; the window opens with an empty
+  PDFView (the gutter is already inverted to near-black in dark mode, so there
+  is no white flash) and fills through exactly the same `installDocument` path a
+  file-change reload uses. Blocking `read` on a semaphore or a nested run loop
+  was rejected: deadlock risk for no visible gain.
+- **swift-markdown is pinned by `revision:`.** Its manifest depends on
+  swift-cmark by *branch*, and SwiftPM refuses a version range on top of that.
+  `Package.resolved` records both.
 - **Hit counter** is a separate toolbar item after the search field,
   centered, `visibilityPriority = .high`; search field 180pt so nothing
   overflows at the default width. The previous/next segmented control sits
@@ -270,6 +339,43 @@ these steps are only for cutting *signed, notarized* releases there.
   stamps items with `<sparkle:hardwareRequirements>arm64</…>` and Intel Macs
   will never be offered the update. Fine today; would need a lipo'd universal
   binary in `build.sh` to change.
+- **`NSPrintOperation` calls its `didRun` delegate on the print thread**, not
+  the main thread -- that is the flip side of `canSpawnSeparateThread`. Doing
+  anything AppKit there (installing the document into a `PDFView`, in our case)
+  throws `Modifications to the layout engine must not be performed from a
+  background thread`. `MarkdownRenderer.printOperationDidRun` is `nonisolated`
+  and does nothing but hop to main.
+- **Never mutate `NSPrintInfo.shared`.** It is the user's Print… panel state;
+  the renderer builds a fresh `NSPrintInfo(dictionary: [:])` every time.
+- **Set the `PDFDocumentDelegate` before anything touches a page.** PDFKit calls
+  `classForPage` lazily, and a page vended before the delegate is in place is a
+  plain `PDFPage` forever -- it can never draw dark-mode find highlights. In
+  `FolioDocument.install` the delegate assignment comes first.
+- **`restoreFinished` must go false across a document swap.** Assigning a new
+  document makes `PDFView` lay out and report page 1, and the position saver
+  would write that over the place the reader was.
+- **A burst of saves can land a second render while the first install's
+  two-pass jump is still in flight**, and the live `currentDestination` is
+  meaningless at that moment. `lastInstallTarget` is what the next install aims
+  at while `restoreFinished` is false; without it, forty rapid appends walked
+  the reader from page 4 to page 9.
+- **swift-markdown's `HTMLFormatter` wraps every list item's text in a `<p>`,**
+  even in a tight list, so list spacing has to be taken off `li > p` and a task
+  item's text pulled back beside its checkbox with
+  `input[type="checkbox"] + p { display: inline }`.
+- **WebKit ignores `break-after: avoid` when the next block is itself
+  unbreakable**, which strands headings at the foot of a page. The fix in the
+  stylesheet is the old keep-with-next hack: an invisible 72 pt `::after` on
+  every heading, cancelled by an equal negative margin, so the heading box
+  cannot fit in the last inch of a page and carries over with its content.
+- **Run the new build once (or `lsregister -f`) so LaunchServices learns the
+  Markdown type.** `UTImportedTypeDeclarations` only takes effect after the
+  bundle has been registered; `mdls -name kMDItemContentType foo.md` should then
+  say `net.daringfireball.markdown`.
+- **The default-app checkmark compares bundle identifiers, not paths.**
+  LaunchServices resolves `com.epps.Folio` to whichever copy it likes -- setting
+  the default from `build/Folio.app` reported `/Applications/Folio.app` back --
+  so a path comparison would show the item unchecked right after checking it.
 - XML comments cannot contain `--`. The hand-written `appcast.xml` skeleton
   tripped `generate_appcast`'s parser on exactly that.
 
@@ -278,6 +384,9 @@ these steps are only for cutting *signed, notarized* releases there.
 - Dan wants Fable to **plan and review, and delegate implementation to Opus
   subagents** to conserve his usage. Spawn `general-purpose` agents with
   `model: "opus"` and a file-by-file spec; queue follow-ups with SendMessage.
+  This includes Explore/Plan research agents: pass `model: "opus"` on every
+  Agent call (agents inherit Fable otherwise). Confirmed 2026-09-04:
+  "definitely keep fable for big picture thinking."
 - **Never `cd` in Bash**; absolute paths only (his permission rules depend on
   it). Scratch files go in the session scratchpad, not the repo.
 - Repo git email is set locally to dsepps@gmail.com (global is a
@@ -292,4 +401,14 @@ these steps are only for cutting *signed, notarized* releases there.
 - No annotation/highlighting tools; no text-copy cleanup (line-break
   stripping); no per-document invert override (global toggle only).
 - Photos/figures render as luminance-inverted in dark mode; a per-image
-  "don't invert" would need per-tile work and likely isn't worth it.
+  "don't invert" would need per-tile work and likely isn't worth it. Images in
+  a Markdown document invert the same way, for the same reason.
+- **Markdown reload keeps the page number, not the paragraph.** Content
+  inserted *above* the reading position shifts everything down, so the reader
+  ends up slightly earlier in the text than before. Anchoring the restore to the
+  nearest heading (or to a text snapshot) is the obvious next step.
+- A Markdown reload that fails leaves the previous render on screen and waits
+  for the next save -- the usual cause is a half-written file. Only a failure of
+  the *first* render reports an error and closes the document.
+- The renderer holds one WebContent process (60-120 MB) while any Markdown
+  document is open and drops it ~30 s after the last one closes.

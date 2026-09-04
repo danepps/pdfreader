@@ -10,7 +10,8 @@ enum MainMenu {
     static func build(appDelegate: AppDelegate) -> NSMenu {
         let main = NSMenu()
 
-        main.addItem(submenu(appMenu(updater: appDelegate.updaterController)))
+        main.addItem(submenu(appMenu(appDelegate: appDelegate,
+                                     updater: appDelegate.updaterController)))
         main.addItem(submenu(fileMenu()))
         main.addItem(submenu(editMenu()))
         main.addItem(submenu(viewMenu(appDelegate: appDelegate)))
@@ -55,13 +56,19 @@ enum MainMenu {
 
     // MARK: Menus
 
-    private static func appMenu(updater: SPUStandardUpdaterController) -> NSMenu {
+    private static func appMenu(appDelegate: AppDelegate,
+                                updater: SPUStandardUpdaterController) -> NSMenu {
         let menu = NSMenu(title: "Folio")
         add(menu, "About Folio", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
         menu.addItem(.separator())
         // Explicit target: Sparkle's controller is not in the responder chain.
         add(menu, "Check for Updates…",
             #selector(SPUStandardUpdaterController.checkForUpdates(_:)), target: updater)
+        menu.addItem(.separator())
+        // Explicit target: the app delegate is in the responder chain, but only
+        // behind the document, and this item is about the app, not a document.
+        add(menu, "Use Folio to Open Markdown Files",
+            #selector(AppDelegate.makeDefaultMarkdownApp(_:)), target: appDelegate)
         menu.addItem(.separator())
         add(menu, "Hide Folio", #selector(NSApplication.hide(_:)), key: "h")
         add(menu, "Hide Others", #selector(NSApplication.hideOtherApplications(_:)),
@@ -89,6 +96,10 @@ enum MainMenu {
         add(menu, "Close", #selector(NSWindow.performClose(_:)), key: "w")
         menu.addItem(.separator())
         add(menu, "Print…", #selector(NSDocument.printDocument(_:)), key: "p")
+        menu.addItem(.separator())
+        // ⇧⌘E because ⌘E is Use Selection for Find.
+        add(menu, "Export as PDF…", #selector(FolioDocument.exportAsPDF(_:)),
+            key: "e", modifiers: [.command, .shift])
         return menu
     }
 
@@ -139,6 +150,20 @@ enum MainMenu {
 
         add(menu, "Invert Page Colors in Dark Mode",
             #selector(AppDelegate.toggleInvertInDarkMode(_:)), target: appDelegate)
+
+        let markdown = NSMenuItem(title: "Markdown", action: nil, keyEquivalent: "")
+        let markdownMenu = NSMenu(title: "Markdown")
+        for typeface in MarkdownTypeface.allCases {
+            add(markdownMenu, typeface.title, #selector(AppDelegate.setMarkdownTypeface(_:)),
+                target: appDelegate, tag: typeface.rawValue)
+        }
+        markdownMenu.addItem(.separator())
+        for size in Prefs.markdownFontSizes {
+            add(markdownMenu, "\(size) pt", #selector(AppDelegate.setMarkdownFontSize(_:)),
+                target: appDelegate, tag: size)
+        }
+        markdown.submenu = markdownMenu
+        menu.addItem(markdown)
         menu.addItem(.separator())
         add(menu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)),
             key: "f", modifiers: [.command, .control])

@@ -33,6 +33,12 @@ final class SidebarViewController: NSViewController {
         thumbnailView.contentFilters = pendingFilters
     }
 
+    /// The reader swapped its PDFView's document (a Markdown render or reload).
+    /// PDFThumbnailView observes its pdfView and rebuilds itself, so there is
+    /// nothing to reassign here -- verified 2026-09-04 by watching thumbnails
+    /// appear for a Markdown document, whose PDF arrives after the view loads.
+    func documentDidChange() {}
+
     /// Same inversion filters as the reader, so thumbnails match the pages.
     func setContentFilters(_ filters: [CIFilter]) {
         pendingFilters = filters
