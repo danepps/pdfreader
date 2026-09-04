@@ -9,6 +9,16 @@
         <description>Most recent updates to Folio.</description>
         <language>en</language>
         <item>
+            <title>1.0.1</title>
+            <pubDate>Fri, 04 Sep 2026 12:40:01 -0500</pubDate>
+            <link>https://github.com/danepps/pdfreader</link>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/danepps/pdfreader/releases/download/v1.0.1/Folio-1.0.1.zip" length="3404745" type="application/octet-stream" sparkle:edSignature="H8h7vzaYyxQHkB8lDRnqRkLJaNUYXjr2lCfYvKPNhriLIyHdTpQ+f/hj1yCAKEi8yKFe4GuWQPSQsUO1GVEfDA=="/>
+        </item>
+        <item>
             <title>1.0.0</title>
             <pubDate>Fri, 04 Sep 2026 09:20:04 -0500</pubDate>
             <link>https://github.com/danepps/pdfreader</link>
