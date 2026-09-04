@@ -37,8 +37,10 @@ Dan's stated requirements, all met as of this handoff:
   `setFrameAutosaveName` is called last because it restores too. First launch
   centres on the widest landscape display. No `preferredContentSize`: the
   window snaps back to it and that broke macOS window tiling.
-- v1.0.0 released 2026-09-04 (public repo, MIT). Not yet exercised: an
-  actual Sparkle update (needs a second release).
+- v1.0.0 and v1.0.1 released 2026-09-04 (public repo, MIT). The Sparkle
+  path is proven: the installed 1.0.0 in /Applications picked up 1.0.1 and
+  installed it on quit (automatic updates were on, so the download was
+  silent; a manual "Check for Updates…" shows the standard Sparkle panel).
 - Codex (GPT-5) reviewed the code 2026-09-04: `AI Memos/folio-code-review-2026-09-04-Codex-GPT-5.md`.
   Acted on the same day: find-replacement race (state machine, below),
   release.sh preflights, full Edit menu, per-view CIFilter instances, LRU
