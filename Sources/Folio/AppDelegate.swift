@@ -1,8 +1,16 @@
 import AppKit
+import Sparkle
 
 /// Application delegate. Deliberately thin: NSDocumentController does the file
 /// handling, and each window controller owns its own state.
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+
+    /// Sparkle. Starting the updater here (rather than lazily) lets it run its
+    /// scheduled background check; `SUEnableAutomaticChecks` in Info.plist is
+    /// the default, and the user's own choice overrides it thereafter. The
+    /// controller is also the target of the "Check for Updates…" menu item.
+    let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenu.build(appDelegate: self)

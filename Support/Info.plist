@@ -4,38 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
-	<key>CFBundleExecutable</key>
-	<string>Folio</string>
-	<key>CFBundleIconFile</key>
-	<string>Folio</string>
-	<key>CFBundleIconName</key>
-	<string>Folio</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.epps.Folio</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>Folio</string>
 	<key>CFBundleDisplayName</key>
 	<string>Folio</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>0.1</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>14.0</string>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.productivity</string>
-	<key>NSPrincipalClass</key>
-	<string>NSApplication</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSSupportsAutomaticGraphicsSwitching</key>
-	<true/>
-	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2026 Dan Epps.</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -53,5 +23,41 @@
 			<string>FolioDocument</string>
 		</dict>
 	</array>
+	<key>CFBundleExecutable</key>
+	<string>Folio</string>
+	<key>CFBundleIconFile</key>
+	<string>Folio</string>
+	<key>CFBundleIconName</key>
+	<string>Folio</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.epps.Folio</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Folio</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Dan Epps.</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/danepps/pdfreader/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>xkEJ4pttphM6v/lHQQ4mbSe9JHQZFe1eOefG26iqyWU=</string>
 </dict>
 </plist>

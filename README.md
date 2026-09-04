@@ -69,3 +69,7 @@ with a `.screen` blend over each match, which recolors only the glyphs.
 appearances, compiled by `scripts/make-icon.sh` into `Support/Assets.car`
 (macOS 26 uses it via `CFBundleIconName`). The same script renders
 `Support/Folio.icns` as the fallback for macOS 14 and 15.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

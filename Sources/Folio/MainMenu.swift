@@ -1,5 +1,6 @@
 import AppKit
 import PDFKit
+import Sparkle
 
 /// The whole menu bar, built in code. Items use a nil target so they travel the
 /// responder chain (PDFView, the window controller, the document, the app) and
@@ -9,7 +10,7 @@ enum MainMenu {
     static func build(appDelegate: AppDelegate) -> NSMenu {
         let main = NSMenu()
 
-        main.addItem(submenu(appMenu()))
+        main.addItem(submenu(appMenu(updater: appDelegate.updaterController)))
         main.addItem(submenu(fileMenu()))
         main.addItem(submenu(editMenu()))
         main.addItem(submenu(viewMenu(appDelegate: appDelegate)))
@@ -54,9 +55,13 @@ enum MainMenu {
 
     // MARK: Menus
 
-    private static func appMenu() -> NSMenu {
+    private static func appMenu(updater: SPUStandardUpdaterController) -> NSMenu {
         let menu = NSMenu(title: "Folio")
         add(menu, "About Folio", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
+        menu.addItem(.separator())
+        // Explicit target: Sparkle's controller is not in the responder chain.
+        add(menu, "Check for Updates…",
+            #selector(SPUStandardUpdaterController.checkForUpdates(_:)), target: updater)
         menu.addItem(.separator())
         add(menu, "Hide Folio", #selector(NSApplication.hide(_:)), key: "h")
         add(menu, "Hide Others", #selector(NSApplication.hideOtherApplications(_:)),

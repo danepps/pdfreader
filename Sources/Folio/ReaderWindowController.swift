@@ -5,6 +5,7 @@ extension NSToolbarItem.Identifier {
     static let pageIndicator = NSToolbarItem.Identifier("folio.pageIndicator")
     static let search = NSToolbarItem.Identifier("folio.search")
     static let searchCount = NSToolbarItem.Identifier("folio.searchCount")
+    static let searchNav = NSToolbarItem.Identifier("folio.searchNav")
 }
 
 /// Toolbar view for the page indicator: just a container that shows a
@@ -35,6 +36,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private var matches: [PDFSelection] = []
     private var matchIndex = 0
+    private var searchNavControl: NSSegmentedControl?
     private var findInProgress = false
     private var lastQuery = ""
     /// Read once, at init: PDFView posts page-change notifications while it
@@ -71,8 +73,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         window.tabbingIdentifier = "FolioReader"
         window.toolbarStyle = .unified
         window.titlebarSeparatorStyle = .automatic
-        window.center()
-        window.setFrameAutosaveName("ReaderWindow")
+        window.contentMinSize = Self.minimumContentSize
 
         super.init(window: window)
 
@@ -85,6 +86,11 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
 
         buildContent()
+        // Installing the content view controller resizes the window to the
+        // split view's fitting size (320pt wide, no height), so the frame is
+        // chosen only after it: the autosaved one if there is one, else the
+        // default clamped to the screen.
+        sizeWindowInitially(window)
         buildToolbar()
         configurePageControls()
 
@@ -138,6 +144,58 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
     }
 
+    private static let defaultContentSize = NSSize(width: 960, height: 1040)
+    private static let minimumContentSize = NSSize(width: 480, height: 360)
+
+    /// The autosave string is "x y w h sx sy sw sh" in points.
+    private static func hasUsableSavedFrame(named name: String) -> Bool {
+        guard let raw = UserDefaults.standard.string(forKey: "NSWindow Frame \(name)") else {
+            return false
+        }
+        let parts = raw.split(separator: " ").compactMap { Double($0) }
+        guard parts.count >= 4 else { return false }
+        return parts[2] >= minimumContentSize.width && parts[3] >= minimumContentSize.height
+    }
+
+    /// First-launch screen: the widest landscape display (Dan reads on the
+    /// landscape Studio Display, not the portrait one), else whatever there is.
+    private static var preferredScreen: NSScreen? {
+        let landscape = NSScreen.screens.filter { $0.frame.width > $0.frame.height }
+        return landscape.max { $0.frame.width < $1.frame.width } ?? NSScreen.main
+    }
+
+    /// The default frame: defaultContentSize clamped to fit, centred on the
+    /// preferred screen.
+    private static func defaultFrame(for window: NSWindow) -> NSRect {
+        var size = defaultContentSize
+        let chrome = window.frame.height - window.contentLayoutRect.height
+        guard let screen = preferredScreen else {
+            return NSRect(origin: .zero, size: NSSize(width: size.width, height: size.height + chrome))
+        }
+        let visible = screen.visibleFrame
+        size.width = min(size.width, visible.width)
+        size.height = min(size.height, visible.height - chrome)
+        let frameSize = NSSize(width: size.width, height: size.height + chrome)
+        return NSRect(
+            x: visible.midX - frameSize.width / 2,
+            y: visible.midY - frameSize.height / 2,
+            width: frameSize.width,
+            height: frameSize.height
+        )
+    }
+
+    private func sizeWindowInitially(_ window: NSWindow) {
+        if !Self.hasUsableSavedFrame(named: "ReaderWindow") {
+            // A build that predates this sizing logic autosaved the collapsed
+            // 320x32 frame, and setFrameAutosaveName below would restore it
+            // (clamped up to contentMinSize), so drop it first.
+            UserDefaults.standard.removeObject(forKey: "NSWindow Frame ReaderWindow")
+            window.setFrame(Self.defaultFrame(for: window), display: false)
+        }
+        // Restores the saved frame when there is one, and saves from here on.
+        window.setFrameAutosaveName("ReaderWindow")
+    }
+
     private func buildContent() {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarVC)
         sidebarItem.minimumThickness = 150
@@ -153,6 +211,10 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         splitVC.addSplitViewItem(contentItem)
         self.sidebarItem = sidebarItem
 
+        // Installing this shrinks the window to the split view's fitting
+        // size (320pt wide, no height); sizeWindowInitially runs afterwards.
+        // Deliberately no preferredContentSize: the window keeps snapping
+        // back to it, which broke user resizing and window tiling.
         contentViewController = splitVC
     }
 
@@ -316,7 +378,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         [.toggleSidebar, .sidebarTrackingSeparator, .flexibleSpace, .pageIndicator,
-         .flexibleSpace, .search, .searchCount]
+         .flexibleSpace, .search, .searchCount, .searchNav]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -343,6 +405,8 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
             return item
         case .searchCount:
             return makeSearchCountItem()
+        case .searchNav:
+            return makeSearchNavItem()
         default:
             return nil
         }
@@ -389,10 +453,41 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         return item
     }
 
+    /// Previous / next match, mirroring ⇧⌘G / ⌘G. Greyed out until a search
+    /// has produced matches.
+    private func makeSearchNavItem() -> NSToolbarItem {
+        let control = NSSegmentedControl(
+            images: [
+                NSImage(systemSymbolName: "chevron.up", accessibilityDescription: "Previous match")!,
+                NSImage(systemSymbolName: "chevron.down", accessibilityDescription: "Next match")!
+            ],
+            trackingMode: .momentary,
+            target: self,
+            action: #selector(searchNavClicked(_:))
+        )
+        control.segmentStyle = .separated
+        control.setToolTip("Previous match (\u{21E7}\u{2318}G)", forSegment: 0)
+        control.setToolTip("Next match (\u{2318}G)", forSegment: 1)
+        control.isEnabled = false
+        searchNavControl = control
+
+        let item = NSToolbarItem(itemIdentifier: .searchNav)
+        item.label = "Previous/Next"
+        item.paletteLabel = "Previous/Next Match"
+        item.view = control
+        item.visibilityPriority = .high
+        return item
+    }
+
+    @objc private func searchNavClicked(_ sender: NSSegmentedControl) {
+        sender.selectedSegment == 0 ? findPrevious(sender) : findNext(sender)
+    }
+
     private func startFind(_ query: String) {
         if let pdf = folioDocument.pdf, pdf.isFinding { pdf.cancelFindString() }
         matches.removeAll()
         matchIndex = 0
+        searchNavControl?.isEnabled = false
         pdfView.highlightedSelections = nil
         pdfView.setFindMatches([], current: 0)
 
@@ -407,12 +502,16 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     func findDidMatch(_ selection: PDFSelection) {
         matches.append(selection)
-        // Show the first hit immediately; the rest arrive asynchronously. The
-        // highlight array is only reassigned here and at the end of the search,
-        // because assigning per match is quadratic on large documents.
+        // Show the first hit immediately; the rest arrive asynchronously.
+        // Reassigning the highlight array per match is quadratic on large
+        // documents, so later hits are batched onto a short timer instead:
+        // they appear within ~150ms of being found rather than only when the
+        // whole search ends.
         if matches.count == 1 {
             showMatch(0)
             applyHighlights()
+        } else {
+            scheduleHighlightRefresh()
         }
         searchCountLabel.stringValue = "\(matches.count) found…"
     }
@@ -423,10 +522,24 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         updateSearchCount()
     }
 
+    private var highlightRefreshPending = false
+
+    private func scheduleHighlightRefresh() {
+        guard !highlightRefreshPending else { return }
+        highlightRefreshPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            guard let self else { return }
+            self.highlightRefreshPending = false
+            // findDidEnd has already applied the final set if the search is over.
+            if self.findInProgress { self.applyHighlights() }
+        }
+    }
+
     /// "K of N" once a search has finished, "No matches" when it found nothing,
     /// blank when there is no query. Left alone while a search is still running
     /// -- findDidMatch shows the running total there.
     private func updateSearchCount() {
+        searchNavControl?.isEnabled = !matches.isEmpty
         guard !lastQuery.isEmpty else {
             searchCountLabel.stringValue = ""
             return

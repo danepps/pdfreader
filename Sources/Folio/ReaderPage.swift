@@ -12,7 +12,7 @@ private final class HighlightBox: NSObject {
 
 /// PDFPage subclass used for every page (see `FolioDocument.classForPage()`).
 /// It draws the dark-mode find highlights: PDFKit renders pages through the
-/// page object, so this is the hook that actually runs, and the reverse-video
+/// page object, so this is the hook that actually runs, and the highlight
 /// boxes end up inside the view's inversion filter along with the text.
 ///
 /// Deliberately no Swift stored properties: PDFKit allocates pages through a
@@ -39,8 +39,11 @@ final class ReaderPage: PDFPage {
 
     /// Pre-filter ink for the matches. The view's inversion filter (invert +
     /// 180 degree hue rotation) turns this into terminal green, ~#5CF25C, on
-    /// the dark page.
+    /// the dark page. Drawn translucently over white paper it comes out as a
+    /// dark-green box with the glyphs inside lifted to pale green.
     private static let matchInk = CGColor(red: 0, green: 0.77, blue: 0, alpha: 1)
+    private static let boxAlpha: CGFloat = 0.35
+    private static let currentOutlineWidth: CGFloat = 1.5
 
     override func draw(with box: PDFDisplayBox, to context: CGContext) {
         super.draw(with: box, to: context)
@@ -50,24 +53,26 @@ final class ReaderPage: PDFPage {
 
         context.saveGState()
 
-        // Screen leaves the white paper white and lifts the black glyphs to the
-        // fill colour, so only the matched text is recoloured -- no box. The
-        // 1pt vertical inset keeps the rect off the neighbouring lines, whose
-        // ascenders and descenders reach into a line's selection bounds.
-        context.setBlendMode(.screen)
-        context.setFillColor(Self.matchInk)
+        // A translucent box over each match, mirroring light mode's native
+        // highlight. The 1pt vertical inset keeps the rect off the
+        // neighbouring lines, whose ascenders and descenders reach into a
+        // line's selection bounds.
+        context.setBlendMode(.normal)
+        context.setFillColor(Self.matchInk.copy(alpha: Self.boxAlpha) ?? Self.matchInk)
         for highlight in boxes {
             context.fill(highlight.rect.insetBy(dx: 0, dy: 1))
         }
 
-        // The current match gets a 2pt underline along the inside of its bottom
-        // edge. (An outline drawn *outside* the rect painted opaque green over
-        // the neighbouring lines' glyphs, which the inversion filter turned
-        // into a dark strike through them.)
-        context.setBlendMode(.normal)
+        // The current match adds a solid outline just inside its box. (An
+        // outline drawn *outside* the rect painted opaque green over the
+        // neighbouring lines' glyphs, which the inversion filter turned into a
+        // dark strike through them.)
+        context.setStrokeColor(Self.matchInk)
+        context.setLineWidth(Self.currentOutlineWidth)
         for highlight in boxes where highlight.isCurrent {
             let rect = highlight.rect.insetBy(dx: 0, dy: 1)
-            context.fill(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: 2))
+                .insetBy(dx: Self.currentOutlineWidth / 2, dy: Self.currentOutlineWidth / 2)
+            context.stroke(rect)
         }
 
         context.restoreGState()
