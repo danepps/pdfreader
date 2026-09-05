@@ -9,5 +9,15 @@
         <link>https://raw.githubusercontent.com/danepps/glassine/main/glassine-appcast.xml</link>
         <description>Most recent updates to Glassine.</description>
         <language>en</language>
+        <item>
+            <title>1.2.0</title>
+            <pubDate>Sat, 05 Sep 2026 10:39:48 -0500</pubDate>
+            <link>https://github.com/danepps/glassine</link>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>1.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/danepps/glassine/releases/download/v1.2.0/Glassine-1.2.0.zip" length="4039909" type="application/octet-stream" sparkle:edSignature="RZj3PUpJugrd6OQvgXMWi3chmIIcGxEpntN3uX4gYIpHRK26NSX+rfaFb+uhtkjy7ICeLnBEFKmo9lUMTpEwCg=="/>
+        </item>
     </channel>
 </rss>
