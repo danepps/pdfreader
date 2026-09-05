@@ -687,8 +687,10 @@ Steps 1–4 are kept for setting up any further machine.
   "definitely keep fable for big picture thinking."
 - **Never `cd` in Bash**; absolute paths only (his permission rules depend on
   it). Scratch files go in the session scratchpad, not the repo.
-- Repo git email is set locally to dsepps@gmail.com (global is a
-  placeholder). Commit/push only when he asks; he has asked for pushes here.
+- Commit identity is the global git config on both Macs, `Dan Epps
+  <dse@danepps.com>` (set 2026-09-05; no repo-local override). Earlier commits
+  carry dsepps@gmail.com, which now maps to the danepps GitHub account too.
+  Commit/push only when he asks; he has asked for pushes here.
 - The app was "Folio" (bundle id `com.epps.Folio`) until Dan renamed it to
   Glassine on 2026-09-05. A further rename is a case-sensitive find-and-replace
   over `Sources/`, `Support/Info.plist`, `build.sh`, `release.sh` and
