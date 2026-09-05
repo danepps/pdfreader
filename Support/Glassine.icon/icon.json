@@ -6,7 +6,7 @@
     {
       "layers" : [
         {
-          "image-name" : "Folio-Dark-1024.png",
+          "image-name" : "Glassine-Dark-1024.png",
           "name" : "Dark Artwork",
           "opacity-specializations" : [
             {
@@ -19,7 +19,7 @@
           ]
         },
         {
-          "image-name" : "Folio-Light-1024.png",
+          "image-name" : "Glassine-Light-1024.png",
           "name" : "Default Artwork",
           "opacity-specializations" : [
             {

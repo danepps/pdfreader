@@ -121,7 +121,7 @@ final class ReaderPDFView: PDFView {
 final class ReaderViewController: NSViewController {
 
     let pdfView = ReaderPDFView()
-    private let folioDocument: FolioDocument
+    private let glassineDocument: GlassineDocument
 
     /// True when pages are being shown light-on-dark.
     private(set) var isInverted = false
@@ -143,8 +143,8 @@ final class ReaderViewController: NSViewController {
 
     private lazy var invertFilters = Self.makeInvertFilters()
 
-    init(document: FolioDocument) {
-        self.folioDocument = document
+    init(document: GlassineDocument) {
+        self.glassineDocument = document
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -169,13 +169,13 @@ final class ReaderViewController: NSViewController {
         // Inversion is a layer filter on the whole view, so PDFKit's own white
         // placeholder tiles are inverted too and pages never flash white.
         pdfView.wantsLayer = true
-        pdfView.document = folioDocument.pdf
+        pdfView.document = glassineDocument.pdf
         pdfView.onEffectiveAppearanceChange = { [weak self] in self?.applyAppearance() }
 
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(prefsChanged),
-            name: .folioPrefsChanged,
+            name: .glassinePrefsChanged,
             object: nil
         )
     }

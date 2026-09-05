@@ -2,10 +2,10 @@ import AppKit
 import PDFKit
 
 extension NSToolbarItem.Identifier {
-    static let pageIndicator = NSToolbarItem.Identifier("folio.pageIndicator")
-    static let search = NSToolbarItem.Identifier("folio.search")
-    static let searchCount = NSToolbarItem.Identifier("folio.searchCount")
-    static let searchNav = NSToolbarItem.Identifier("folio.searchNav")
+    static let pageIndicator = NSToolbarItem.Identifier("glassine.pageIndicator")
+    static let search = NSToolbarItem.Identifier("glassine.search")
+    static let searchCount = NSToolbarItem.Identifier("glassine.searchCount")
+    static let searchNav = NSToolbarItem.Identifier("glassine.searchNav")
 }
 
 /// Toolbar view for the page indicator: just a container that shows a
@@ -76,7 +76,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
                                     NSSearchFieldDelegate, NSTextFieldDelegate,
                                     NSMenuItemValidation, FindSink {
 
-    private let folioDocument: FolioDocument
+    private let glassineDocument: GlassineDocument
     private let readerVC: ReaderViewController
     private let sidebarVC: SidebarViewController
     private let splitVC = NSSplitViewController()
@@ -116,12 +116,12 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     private var lastInstallTarget: Prefs.Position?
 
     private var pdfView: ReaderPDFView { readerVC.pdfView }
-    private var pageCount: Int { folioDocument.pdf?.pageCount ?? 0 }
+    private var pageCount: Int { glassineDocument.pdf?.pageCount ?? 0 }
 
     // MARK: Init
 
-    init(document: FolioDocument) {
-        folioDocument = document
+    init(document: GlassineDocument) {
+        glassineDocument = document
         savedPosition = document.fileURL.flatMap { Prefs.lastPosition(for: $0) }
         let reader = ReaderViewController(document: document)
         readerVC = reader
@@ -139,7 +139,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         )
         window.isReleasedWhenClosed = false
         window.tabbingMode = .preferred
-        window.tabbingIdentifier = "FolioReader"
+        window.tabbingIdentifier = "GlassineReader"
         window.toolbarStyle = .unified
         window.titlebarSeparatorStyle = .automatic
         window.contentMinSize = Self.minimumContentSize
@@ -167,7 +167,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(prefsChanged),
-            name: .folioPrefsChanged,
+            name: .glassinePrefsChanged,
             object: nil
         )
         NotificationCenter.default.addObserver(
@@ -181,7 +181,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(documentDidReplacePDF(_:)),
-            name: .folioDocumentDidReplacePDF,
+            name: .glassineDocumentDidReplacePDF,
             object: document
         )
     }
@@ -326,7 +326,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         // Toolbars sharing an identifier are kept in sync by AppKit, so
         // removing the page indicator for one continuous Markdown window would
         // strip it from every other window (and every window opened after).
-        let toolbar = NSToolbar(identifier: "FolioReaderToolbar.\(UUID().uuidString)")
+        let toolbar = NSToolbar(identifier: "GlassineReaderToolbar.\(UUID().uuidString)")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
@@ -627,7 +627,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         // query until the old search's end callback arrives, discarding
         // anything else from it in the meantime. The timer is a safety net in
         // case PDFKit never reports the end of a cancelled search.
-        if let pdf = folioDocument.pdf, pdf.isFinding {
+        if let pdf = glassineDocument.pdf, pdf.isFinding {
             pdf.cancelFindString()
             pendingQuery = trimmed
             awaitingCancelledFindEnd = true
@@ -643,7 +643,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private func beginFind(_ trimmed: String) {
         findInProgress = !trimmed.isEmpty
-        guard !trimmed.isEmpty, let pdf = folioDocument.pdf else { return }
+        guard !trimmed.isEmpty, let pdf = glassineDocument.pdf else { return }
         pdf.beginFindString(trimmed, withOptions: [.caseInsensitive])
     }
 
@@ -874,7 +874,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
             return sidebarVC.hasOutline
         case #selector(focusPageField(_:)):
             // A continuous Markdown document has no page indicator to edit.
-            return pageCount > 0 && !folioDocument.isContinuousMarkdown
+            return pageCount > 0 && !glassineDocument.isContinuousMarkdown
         default:
             break
         }
@@ -894,7 +894,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     func windowWillClose(_ notification: Notification) {
-        if let pdf = folioDocument.pdf, pdf.isFinding { pdf.cancelFindString() }
+        if let pdf = glassineDocument.pdf, pdf.isFinding { pdf.cancelFindString() }
         savePosition()
     }
 
@@ -904,7 +904,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         // Nothing is worth saving until the restore has run: the layout-time
         // page changes all report page 1.
         guard restoreFinished else { return }
-        guard let url = folioDocument.fileURL,
+        guard let url = glassineDocument.fileURL,
               let pdf = pdfView.document,
               let destination = pdfView.currentDestination,
               let page = destination.page
@@ -923,7 +923,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         guard !restoreStarted else { return }
         // A Markdown document has no PDF yet when its window is shown. Leave
         // restoreStarted false: the first render posts
-        // .folioDocumentDidReplacePDF and installDocument does the restore.
+        // .glassineDocumentDidReplacePDF and installDocument does the restore.
         guard pdfView.document != nil else { return }
         restoreStarted = true
 
@@ -969,9 +969,9 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     // MARK: Document replacement (Markdown render / reload)
 
     @objc private func documentDidReplacePDF(_ note: Notification) {
-        guard let replacement = folioDocument.pdf else { return }
+        guard let replacement = glassineDocument.pdf else { return }
         let initial = (note.userInfo?["initial"] as? Bool) ?? false
-        if let stats = folioDocument.markdownStats {
+        if let stats = glassineDocument.markdownStats {
             window?.subtitle = "\(stats.words.formatted(.number)) words · \(stats.minutes) min"
         }
         // On a reload, hold the place the reader is actually looking at; on the
@@ -1002,7 +1002,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         restoreFinished = false
 
         // Every PDFSelection we hold points into the document about to go away.
-        if let old = folioDocument.pdf, old !== replacement, old.isFinding {
+        if let old = glassineDocument.pdf, old !== replacement, old.isFinding {
             old.cancelFindString()
         }
         matches.removeAll()
@@ -1017,7 +1017,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         pdfView.document = replacement
         sidebarVC.documentDidChange()
-        setPageIndicatorVisible(!folioDocument.isContinuousMarkdown)
+        setPageIndicatorVisible(!glassineDocument.isContinuousMarkdown)
         pageIndicatorWidth?.constant = indicatorWidth(for: replacement.pageCount)
         updatePageField()
 

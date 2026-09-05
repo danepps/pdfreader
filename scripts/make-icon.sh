@@ -1,14 +1,14 @@
 #!/bin/zsh
-# make-icon.sh — regenerate every Folio icon artifact from scripts/make-icon.swift.
+# make-icon.sh — regenerate every Glassine icon artifact from scripts/make-icon.swift.
 #
 # Produces, under Support/:
-#   Folio.icns                  legacy icon, light artwork (macOS 14/15 fallback)
-#   Folio.icon/                 Icon Composer package, light + dark appearances
+#   Glassine.icns               legacy icon, light artwork (macOS 14/15 fallback)
+#   Glassine.icon/              Icon Composer package, light + dark appearances
 #   Assets.car                  compiled asset catalog for macOS 26 (Tahoe)
-#   Folio-partial-Info.plist    keys actool says the app's Info.plist needs
+#   Glassine-partial-Info.plist keys actool says the app's Info.plist needs
 #
 # macOS 26 picks the light/dark variant out of Assets.car (via CFBundleIconName);
-# older systems fall back to Folio.icns (via CFBundleIconFile).
+# older systems fall back to Glassine.icns (via CFBundleIconFile).
 
 set -euo pipefail
 
@@ -17,10 +17,10 @@ ROOT="${SCRIPT_DIR:h}"
 SUPPORT="$ROOT/Support"
 RENDER="$SCRIPT_DIR/make-icon.swift"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/folio-icon.XXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/glassine-icon.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
-ICON_NAME=Folio                      # must match CFBundleIconName / CFBundleIconFile
+ICON_NAME=Glassine                   # must match CFBundleIconName / CFBundleIconFile
 ICONPKG="$SUPPORT/$ICON_NAME.icon"
 DEPLOY_TARGET=14.0                   # matches LSMinimumSystemVersion in Info.plist
 
@@ -30,11 +30,11 @@ mkdir -p "$SUPPORT"
 # Legacy .icns art uses the inset 824-in-1024 grid; Icon Composer layers are
 # full-bleed and get masked to the icon shape by the system.
 echo "==> rendering artwork"
-swift "$RENDER" "$WORK/folio-legacy-1024.png"
+swift "$RENDER" "$WORK/glassine-legacy-1024.png"
 rm -rf "$ICONPKG"
 mkdir -p "$ICONPKG/Assets"
-swift "$RENDER" "$ICONPKG/Assets/Folio-Light-1024.png" --full-bleed
-swift "$RENDER" "$ICONPKG/Assets/Folio-Dark-1024.png"  --full-bleed --dark
+swift "$RENDER" "$ICONPKG/Assets/Glassine-Light-1024.png" --full-bleed
+swift "$RENDER" "$ICONPKG/Assets/Glassine-Dark-1024.png"  --full-bleed --dark
 
 # ------------------------------------------------------------------ 2. .icns
 echo "==> building $ICON_NAME.icns"
@@ -53,7 +53,7 @@ for pair in \
   512:icon_512x512.png \
   1024:icon_512x512@2x.png
 do
-  sips -z "${pair%%:*}" "${pair%%:*}" "$WORK/folio-legacy-1024.png" \
+  sips -z "${pair%%:*}" "${pair%%:*}" "$WORK/glassine-legacy-1024.png" \
        --out "$ICONSET/${pair#*:}" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$SUPPORT/$ICON_NAME.icns"
@@ -72,7 +72,7 @@ cat > "$ICONPKG/icon.json" <<'JSON'
     {
       "layers" : [
         {
-          "image-name" : "Folio-Dark-1024.png",
+          "image-name" : "Glassine-Dark-1024.png",
           "name" : "Dark Artwork",
           "opacity-specializations" : [
             {
@@ -85,7 +85,7 @@ cat > "$ICONPKG/icon.json" <<'JSON'
           ]
         },
         {
-          "image-name" : "Folio-Light-1024.png",
+          "image-name" : "Glassine-Light-1024.png",
           "name" : "Default Artwork",
           "opacity-specializations" : [
             {

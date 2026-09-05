@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Folio",
+    name: "Glassine",
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.7.0"),
@@ -13,12 +13,12 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "Folio",
+            name: "Glassine",
             dependencies: [
                 .product(name: "Sparkle", package: "Sparkle"),
                 .product(name: "Markdown", package: "swift-markdown")
             ],
-            path: "Sources/Folio",
+            path: "Sources/Glassine",
             swiftSettings: [.unsafeFlags(["-Onone"], .when(configuration: .debug))],
             // `swift build` does not embed frameworks the way Xcode does, so
             // build.sh copies Sparkle.framework into Contents/Frameworks and

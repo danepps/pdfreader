@@ -1,4 +1,4 @@
-// make-icon-concepts.swift — exploratory Folio app-icon directions.
+// make-icon-concepts.swift — exploratory Glassine app-icon directions.
 //
 // Produces three light/dark concept pairs plus a review board. These are
 // intentionally separate from the shipping icon pipeline until a direction is
@@ -122,14 +122,14 @@ func drawFold(rect: CGRect, size: CGFloat, color: CGColor, in ctx: CGContext) {
 
 enum Concept: String, CaseIterable {
     case invert = "Invert"
-    case folio = "Folio Stack"
+    case pageStack = "Page Stack"
     case focus = "Focus Band"
 }
 
 enum RoundTwoConcept: String, CaseIterable {
     case aperture = "Night Aperture"
     case pageTurn = "Page Turn"
-    case openFolio = "Open Folio"
+    case openBook = "Open Book"
     case marginTabs = "Margin Tabs"
     case portal = "Reader Portal"
     case foldedF = "Folded F"
@@ -173,7 +173,7 @@ func drawInvert(dark: Bool) -> CGImage {
     return ctx.makeImage()!
 }
 
-func drawFolio(dark: Bool) -> CGImage {
+func drawPageStack(dark: Bool) -> CGImage {
     let ctx = context(width: 1024, height: 1024)
     background(in: ctx,
                top: dark ? rgb(20, 45, 45) : rgb(34, 110, 107),
@@ -245,7 +245,7 @@ func drawFocus(dark: Bool) -> CGImage {
 func image(for concept: Concept, dark: Bool) -> CGImage {
     switch concept {
     case .invert: return drawInvert(dark: dark)
-    case .folio: return drawFolio(dark: dark)
+    case .pageStack: return drawPageStack(dark: dark)
     case .focus: return drawFocus(dark: dark)
     }
 }
@@ -343,7 +343,7 @@ func drawPageTurn(dark: Bool) -> CGImage {
     return ctx.makeImage()!
 }
 
-func drawOpenFolio(dark: Bool) -> CGImage {
+func drawOpenBook(dark: Bool) -> CGImage {
     let ctx = context(width: 1024, height: 1024)
     background(in: ctx,
                top: dark ? rgb(10, 40, 30) : rgb(38, 145, 93),
@@ -411,7 +411,7 @@ func drawMarginTabs(dark: Bool,
         pill(CGRect(x: 292, y: y, width: width, height: 26), color: colors.ink, in: ctx)
     }
     if showHighlight {
-        // Match Folio's in-app find treatment. Dark appearance is deliberately
+        // Match Glassine's in-app find treatment. Dark appearance is deliberately
         // shifted a little cooler than the raw filtered sample: beside the yellow
         // margin tab, the mathematically pure green reads perceptually olive.
         pill(CGRect(x: 278, y: 434, width: 410, height: 64),
@@ -501,7 +501,7 @@ func image(for concept: RoundTwoConcept, dark: Bool) -> CGImage {
     switch concept {
     case .aperture: return drawAperture(dark: dark)
     case .pageTurn: return drawPageTurn(dark: dark)
-    case .openFolio: return drawOpenFolio(dark: dark)
+    case .openBook: return drawOpenBook(dark: dark)
     case .marginTabs: return drawMarginTabs(dark: dark)
     case .portal: return drawPortal(dark: dark)
     case .foldedF: return drawFoldedF(dark: dark)
@@ -542,7 +542,7 @@ for concept in Concept.allCases {
         let suffix = dark ? "dark" : "light"
         let key = "\(concept.rawValue)-\(suffix)"
         images[key] = rendered
-        write(rendered, to: output.appendingPathComponent("folio-concept-\(concept.rawValue.lowercased().replacingOccurrences(of: " ", with: "-"))-\(suffix).png"))
+        write(rendered, to: output.appendingPathComponent("glassine-concept-\(concept.rawValue.lowercased().replacingOccurrences(of: " ", with: "-"))-\(suffix).png"))
     }
 }
 
@@ -550,7 +550,7 @@ for concept in Concept.allCases {
 let board = context(width: 2400, height: 1680)
 board.setFillColor(rgb(236, 239, 243))
 board.fill(CGRect(x: 0, y: 0, width: 2400, height: 1680))
-label("Folio — app icon directions", at: CGPoint(x: 120, y: 1570),
+label("Glassine — app icon directions", at: CGPoint(x: 120, y: 1570),
       size: 54, color: rgb(28, 35, 45), in: board)
 label("Light and dark appearance studies · with 64 px and 32 px checks", at: CGPoint(x: 122, y: 1512),
       size: 28, color: rgb(91, 101, 114), in: board)
@@ -574,7 +574,7 @@ for (index, concept) in Concept.allCases.enumerated() {
     board.draw(dark, in: CGRect(x: x + 606, y: 492, width: 32, height: 32))
 }
 
-write(board.makeImage()!, to: output.appendingPathComponent("folio-icon-concepts-board.png"))
+write(board.makeImage()!, to: output.appendingPathComponent("glassine-icon-concepts-board.png"))
 
 var roundTwoImages: [String: CGImage] = [:]
 for concept in RoundTwoConcept.allCases {
@@ -584,14 +584,14 @@ for concept in RoundTwoConcept.allCases {
         let key = "\(concept.rawValue)-\(suffix)"
         roundTwoImages[key] = rendered
         let stem = concept.rawValue.lowercased().replacingOccurrences(of: " ", with: "-")
-        write(rendered, to: output.appendingPathComponent("folio-concept-v2-\(stem)-\(suffix).png"))
+        write(rendered, to: output.appendingPathComponent("glassine-concept-v2-\(stem)-\(suffix).png"))
     }
 }
 
 let boardTwo = context(width: 3000, height: 2280)
 boardTwo.setFillColor(rgb(236, 239, 243))
 boardTwo.fill(CGRect(x: 0, y: 0, width: 3000, height: 2280))
-label("Folio — expanded icon directions", at: CGPoint(x: 120, y: 2170),
+label("Glassine — expanded icon directions", at: CGPoint(x: 120, y: 2170),
       size: 58, color: rgb(28, 35, 45), in: boardTwo)
 label("White paper in light appearance · black paper with white type in dark appearance", at: CGPoint(x: 122, y: 2106),
       size: 29, color: rgb(91, 101, 114), in: boardTwo)
@@ -622,7 +622,7 @@ for (index, concept) in RoundTwoConcept.allCases.enumerated() {
     boardTwo.draw(dark, in: CGRect(x: x + 526, y: y + 136, width: 32, height: 32))
 }
 
-write(boardTwo.makeImage()!, to: output.appendingPathComponent("folio-icon-concepts-v2-board.png"))
+write(boardTwo.makeImage()!, to: output.appendingPathComponent("glassine-icon-concepts-v2-board.png"))
 
 struct BackgroundOption {
     let name: String
@@ -663,7 +663,7 @@ var marginPaletteImages: [CGImage] = []
 for option in marginBackgrounds {
     let rendered = drawMarginTabs(dark: false, lightTop: option.top, lightBottom: option.bottom)
     marginPaletteImages.append(rendered)
-    write(rendered, to: output.appendingPathComponent("folio-margin-tabs-bg-\(option.slug).png"))
+    write(rendered, to: output.appendingPathComponent("glassine-margin-tabs-bg-\(option.slug).png"))
 }
 
 let paletteBoard = context(width: 3000, height: 1800)
@@ -690,7 +690,7 @@ for index in marginBackgrounds.indices {
     paletteBoard.draw(rendered, in: CGRect(x: x + 541, y: y + 340, width: 32, height: 32))
 }
 
-write(paletteBoard.makeImage()!, to: output.appendingPathComponent("folio-margin-tabs-light-backgrounds.png"))
+write(paletteBoard.makeImage()!, to: output.appendingPathComponent("glassine-margin-tabs-light-backgrounds.png"))
 
 let selectedLight = drawMarginTabs(
     dark: false,
@@ -700,8 +700,8 @@ let selectedDark = drawMarginTabs(
     dark: true,
     darkTop: rgb(35, 41, 49), darkBottom: rgb(11, 14, 18)
 )
-write(selectedLight, to: output.appendingPathComponent("folio-margin-tabs-selected-light.png"))
-write(selectedDark, to: output.appendingPathComponent("folio-margin-tabs-selected-dark.png"))
+write(selectedLight, to: output.appendingPathComponent("glassine-margin-tabs-selected-light.png"))
+write(selectedDark, to: output.appendingPathComponent("glassine-margin-tabs-selected-dark.png"))
 
 let selectedBoard = context(width: 1900, height: 1160)
 selectedBoard.setFillColor(rgb(236, 239, 243))
@@ -720,7 +720,7 @@ selectedBoard.draw(selectedLight, in: CGRect(x: 810, y: 520, width: 64, height: 
 selectedBoard.draw(selectedLight, in: CGRect(x: 826, y: 452, width: 32, height: 32))
 selectedBoard.draw(selectedDark, in: CGRect(x: 1660, y: 520, width: 64, height: 64))
 selectedBoard.draw(selectedDark, in: CGRect(x: 1676, y: 452, width: 32, height: 32))
-write(selectedBoard.makeImage()!, to: output.appendingPathComponent("folio-margin-tabs-selected-pair.png"))
+write(selectedBoard.makeImage()!, to: output.appendingPathComponent("glassine-margin-tabs-selected-pair.png"))
 
 struct ShapeVariant {
     let name: String
@@ -753,8 +753,8 @@ for variant in shapeVariants {
         roundedBackground: variant.roundedBackground
     )
     variantPairs.append((light, dark))
-    write(light, to: output.appendingPathComponent("folio-margin-tabs-\(variant.slug)-light.png"))
-    write(dark, to: output.appendingPathComponent("folio-margin-tabs-\(variant.slug)-dark.png"))
+    write(light, to: output.appendingPathComponent("glassine-margin-tabs-\(variant.slug)-light.png"))
+    write(dark, to: output.appendingPathComponent("glassine-margin-tabs-\(variant.slug)-dark.png"))
 }
 
 let shapeBoard = context(width: 3000, height: 1260)
@@ -783,7 +783,7 @@ for index in shapeVariants.indices {
     shapeBoard.draw(pair.dark, in: CGRect(x: x + 522, y: 286, width: 32, height: 32))
 }
 
-write(shapeBoard.makeImage()!, to: output.appendingPathComponent("folio-margin-tabs-shape-variants.png"))
+write(shapeBoard.makeImage()!, to: output.appendingPathComponent("glassine-margin-tabs-shape-variants.png"))
 
 let equalLinesLight = drawMarginTabs(
     dark: false,
@@ -795,8 +795,8 @@ let equalLinesDark = drawMarginTabs(
     darkTop: rgb(35, 41, 49), darkBottom: rgb(11, 14, 18),
     showHighlight: false, roundedBackground: true, uniformLineWidths: true
 )
-write(equalLinesLight, to: output.appendingPathComponent("folio-margin-tabs-clean-rounded-equal-lines-light.png"))
-write(equalLinesDark, to: output.appendingPathComponent("folio-margin-tabs-clean-rounded-equal-lines-dark.png"))
+write(equalLinesLight, to: output.appendingPathComponent("glassine-margin-tabs-clean-rounded-equal-lines-light.png"))
+write(equalLinesDark, to: output.appendingPathComponent("glassine-margin-tabs-clean-rounded-equal-lines-dark.png"))
 
 let equalLinesBoard = context(width: 1900, height: 1160)
 equalLinesBoard.setFillColor(rgb(236, 239, 243))
@@ -815,5 +815,5 @@ equalLinesBoard.draw(equalLinesLight, in: CGRect(x: 810, y: 520, width: 64, heig
 equalLinesBoard.draw(equalLinesLight, in: CGRect(x: 826, y: 452, width: 32, height: 32))
 equalLinesBoard.draw(equalLinesDark, in: CGRect(x: 1660, y: 520, width: 64, height: 64))
 equalLinesBoard.draw(equalLinesDark, in: CGRect(x: 1676, y: 452, width: 32, height: 32))
-write(equalLinesBoard.makeImage()!, to: output.appendingPathComponent("folio-margin-tabs-clean-rounded-equal-lines-pair.png"))
+write(equalLinesBoard.makeImage()!, to: output.appendingPathComponent("glassine-margin-tabs-clean-rounded-equal-lines-pair.png"))
 print("wrote concepts to \(output.path)")

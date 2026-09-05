@@ -19,7 +19,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource,
     /// selection handler does not turn around and navigate.
     private var isSyncingSelection = false
 
-    private static let cellIdentifier = NSUserInterfaceItemIdentifier("folio.outlineCell")
+    private static let cellIdentifier = NSUserInterfaceItemIdentifier("glassine.outlineCell")
 
     var hasOutline: Bool { (outlineRoot?.numberOfChildren ?? 0) > 0 }
 
@@ -94,7 +94,7 @@ final class SidebarViewController: NSViewController, NSOutlineViewDataSource,
     }
 
     private func buildOutline() {
-        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("folio.outline"))
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("glassine.outline"))
         column.resizingMask = .autoresizingMask
         outlineView.addTableColumn(column)
         outlineView.outlineTableColumn = column

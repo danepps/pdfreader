@@ -10,7 +10,7 @@ private final class HighlightBox: NSObject {
     init(_ items: [ReaderPage.Highlight]) { self.items = items }
 }
 
-/// PDFPage subclass used for every page (see `FolioDocument.classForPage()`).
+/// PDFPage subclass used for every page (see `GlassineDocument.classForPage()`).
 /// It draws the dark-mode find highlights: PDFKit renders pages through the
 /// page object, so this is the hook that actually runs, and the highlight
 /// boxes end up inside the view's inversion filter along with the text.

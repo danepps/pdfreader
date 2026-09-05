@@ -245,7 +245,7 @@ final class MarkdownRenderer: NSObject {
         guard current != nil, let webView, let hostWindow else { return }
 
         let output = FileManager.default.temporaryDirectory
-            .appendingPathComponent("folio-md-\(UUID().uuidString).pdf")
+            .appendingPathComponent("glassine-md-\(UUID().uuidString).pdf")
         outputURL = output
 
         // One tall page instead of many: the paper is exactly as tall as the

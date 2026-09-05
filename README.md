@@ -1,8 +1,15 @@
-# Folio
+# Glassine
+
+<https://github.com/danepps/glassine>
 
 A small, fast, native macOS PDF reader that also opens Markdown. Swift + AppKit
 + PDFKit, no Electron, no storyboards; WebKit is used only offscreen, to typeset
 Markdown into pages. Built because PDF Expert got slow.
+
+Renamed from **Folio** at 1.1.0; the bundle identifier changed with it, so the
+first launch carries your Folio settings, reading positions and custom Markdown
+styles across, and an installed Folio has to be replaced by hand rather than
+updated in place.
 
 - **Dark mode that inverts the page.** Follows the system appearance; in dark
   mode the PDF content itself renders light-on-dark, not just the window chrome.
@@ -22,7 +29,7 @@ Markdown into pages. Built because PDF Expert got slow.
   stylesheets — Manuscript (New York serif), Modern (SF, airy), GitHub,
   Antique (Baskerville, old-style numerals), Ink (small-caps heads, tight
   leading) and Academic (Times, indented paragraphs) — plus the body size.
-  Drop a `.css` file into `~/Library/Application Support/Folio/Styles`
+  Drop a `.css` file into `~/Library/Application Support/Glassine/Styles`
   (View ▸ Markdown ▸ Style ▸ Open Styles Folder…) and it joins the menu; it can
   set the stylesheet's variables (`--body-font`, `--line-height`, `--rule`, …)
   or override anything.
@@ -47,14 +54,14 @@ Requires Xcode (or the command-line tools with a Swift 5.9+ toolchain) on
 macOS 14 or later, Apple Silicon only (the build is arm64; a universal binary would need `lipo` in `build.sh`).
 
 ```sh
-./build.sh          # builds build/Folio.app
+./build.sh          # builds build/Glassine.app
 ./build.sh --run    # builds and launches
 ./build.sh --debug  # debug configuration
 ```
 
-Drag `build/Folio.app` to `/Applications` if you want it in Launchpad, then
+Drag `build/Glassine.app` to `/Applications` if you want it in Launchpad, then
 right-click a PDF ▸ Get Info ▸ Open With to make it the default. For Markdown
-there is a menu item: Folio ▸ Use Folio to Open Markdown Files.
+there is a menu item: Glassine ▸ Use Glassine to Open Markdown Files.
 
 Dependencies are Sparkle and [swift-markdown][], which is pinned by commit
 because its own manifest depends on swift-cmark by branch and SwiftPM will not
@@ -67,13 +74,15 @@ accept a version range on top of that.
 ```
 Package.swift                 Swift Package (single executable target)
 Support/Info.plist            bundle metadata, PDF document type
-Support/Folio.icon, .icns, Assets.car   app icon sources and compiled variants
+Support/Glassine.icon, .icns, Assets.car   app icon sources and compiled variants
 build.sh                      assembles the .app bundle
-Sources/Folio/
+release.sh                    cuts a release and updates glassine-appcast.xml
+glassine-appcast.xml          Sparkle feed (appcast.xml is Folio's, frozen)
+Sources/Glassine/
   main.swift                  NSApplication bootstrap
-  AppDelegate.swift           launch behavior, appearance menu actions
+  AppDelegate.swift           launch behavior, appearance menu actions, Folio migration
   MainMenu.swift              menu bar, built in code
-  FolioDocument.swift         NSDocument wrapper around PDFDocument (PDF or Markdown)
+  GlassineDocument.swift      NSDocument wrapper around PDFDocument (PDF or Markdown)
   MarkdownHTML.swift          Markdown -> HTML + headings + the print stylesheet
   MarkdownRenderer.swift      offscreen WKWebView that typesets HTML into a PDF
   FileWatcher.swift           vnode watcher behind Markdown auto-refresh
@@ -115,7 +124,7 @@ WebKit subtracts the print info's margins itself and setting both doubles them.
 
 The stylesheet is two layers: a base layer of structure and CSS variables, and
 a style layer that sets those variables — a built-in, or a `.css` file from
-`~/Library/Application Support/Folio/Styles` used verbatim. Colours are picked
+`~/Library/Application Support/Glassine/Styles` used verbatim. Colours are picked
 for how they look *after* the dark-mode inversion filter, which is a luminance
 flip performed in linear light: code and table-header panels are near-white so
 they come back as dark grays, and the page background must be pure white,
@@ -129,10 +138,10 @@ outline, and position memory need to know nothing about it.
 
 ## Icon
 
-`Support/Folio.icon` is an Icon Composer package with light and dark
+`Support/Glassine.icon` is an Icon Composer package with light and dark
 appearances, compiled by `scripts/make-icon.sh` into `Support/Assets.car`
 (macOS 26 uses it via `CFBundleIconName`). The same script renders
-`Support/Folio.icns` as the fallback for macOS 14 and 15.
+`Support/Glassine.icns` as the fallback for macOS 14 and 15.
 `swift scripts/make-doc-icon.swift` builds `Support/MarkdownDocument.icns`,
 the Finder document icon for `.md` files.
 
