@@ -1,21 +1,44 @@
 # Folio
 
-A small, fast, native macOS PDF reader. Swift + AppKit + PDFKit, no Electron, no
-web view, no storyboards. Built because PDF Expert got slow.
+A small, fast, native macOS PDF reader that also opens Markdown. Swift + AppKit
++ PDFKit, no Electron, no storyboards; WebKit is used only offscreen, to typeset
+Markdown into pages. Built because PDF Expert got slow.
 
 - **Dark mode that inverts the page.** Follows the system appearance; in dark
   mode the PDF content itself renders light-on-dark, not just the window chrome.
   Toggle with View ▸ Invert Page Colors in Dark Mode, or force Light/Dark under
   View ▸ Appearance.
+- **Adjustable window opacity.** View ▸ Window Opacity fades the whole window
+  from 100% down to 30% so you can read against what is behind it; ⌥⌘↑ / ⌥⌘↓
+  step it.
+- **Opens Markdown too.** A `.md` file is typeset into real pages and shown
+  through the same reader, so tabs, dark mode, find, paging, and position memory
+  all work on it. It re-renders within about half a second whenever the file
+  changes on disk, keeping your place. The title bar shows its word count and
+  reading time. Export the rendered pages with ⇧⌘E — always paginated, however
+  you are reading it.
+- **Markdown styles.** View ▸ Markdown ▸ Style offers six print-quality
+  stylesheets — Manuscript (New York serif), Modern (SF, airy), GitHub,
+  Antique (Baskerville, old-style numerals), Ink (small-caps heads, tight
+  leading) and Academic (Times, indented paragraphs) — plus the body size.
+  Drop a `.css` file into `~/Library/Application Support/Folio/Styles`
+  (View ▸ Markdown ▸ Style ▸ Open Styles Folder…) and it joins the menu; it can
+  set the stylesheet's variables (`--body-font`, `--line-height`, `--rule`, …)
+  or override anything.
+- **Pages or continuous.** View ▸ Markdown ▸ Pages / Continuous: real Letter
+  pages, or one uninterrupted column with no page breaks at all.
 - **One window, native tabs.** Every PDF opens as a tab (⌘T opens another,
   ⇧⌘[ / ⇧⌘] switch, drag tabs out to split).
 - **Zippy.** Renders through PDFKit, the same engine as Preview. Launches cold in
   well under a second.
 - **Remembers where you were** in each file.
 - Arrow keys always page: ↑/← previous, ↓/→ next, ⌘↑/⌘↓ first/last.
-- Thumbnail sidebar (⌃⌘S), find with a hit counter and green highlights (⌘F,
+- **Sidebar with a table of contents.** ⌃⌘S shows it; ⌥⌘2 and ⌥⌘3 switch
+  between page thumbnails and the document's chapters. Markdown gets an outline
+  too, synthesised from its headings, and the current entry follows you.
+- Find with a hit counter and green highlights (⌘F,
   ⌘G / ⇧⌘G), go to page (⌥⌘G), zoom (⌘= / ⌘- / ⌘0 fit / ⌘1 actual),
-  back/forward (⌘[ / ⌘]), print.
+  back/forward (⌘[ / ⌘]), print, export as PDF (⇧⌘E).
 
 ## Build
 
@@ -29,7 +52,14 @@ macOS 14 or later, Apple Silicon only (the build is arm64; a universal binary wo
 ```
 
 Drag `build/Folio.app` to `/Applications` if you want it in Launchpad, then
-right-click a PDF ▸ Get Info ▸ Open With to make it the default.
+right-click a PDF ▸ Get Info ▸ Open With to make it the default. For Markdown
+there is a menu item: Folio ▸ Use Folio to Open Markdown Files.
+
+Dependencies are Sparkle and [swift-markdown][], which is pinned by commit
+because its own manifest depends on swift-cmark by branch and SwiftPM will not
+accept a version range on top of that.
+
+[swift-markdown]: https://github.com/swiftlang/swift-markdown
 
 ## Layout
 
@@ -42,10 +72,13 @@ Sources/Folio/
   main.swift                  NSApplication bootstrap
   AppDelegate.swift           launch behavior, appearance menu actions
   MainMenu.swift              menu bar, built in code
-  FolioDocument.swift         NSDocument wrapper around PDFDocument
+  FolioDocument.swift         NSDocument wrapper around PDFDocument (PDF or Markdown)
+  MarkdownHTML.swift          Markdown -> HTML + headings + the print stylesheet
+  MarkdownRenderer.swift      offscreen WKWebView that typesets HTML into a PDF
+  FileWatcher.swift           vnode watcher behind Markdown auto-refresh
   ReaderWindowController.swift  window, toolbar, tabs, find, page field
   ReaderViewController.swift  the PDFView and dark-mode handling
-  SidebarViewController.swift thumbnail sidebar
+  SidebarViewController.swift sidebar: page thumbnails and the outline pane
   ReaderPage.swift            PDFPage subclass that draws dark-mode find highlights
   Prefs.swift                 UserDefaults-backed settings and reading positions
 ```
@@ -62,6 +95,36 @@ the filter (the page gutter, the green find highlights) are chosen pre-filter.
 
 Find highlights in dark mode are drawn by `ReaderPage` (a `PDFPage` subclass)
 with a `.screen` blend over each match, which recolors only the glyphs.
+
+## How Markdown viewing works
+
+A Markdown file is parsed with Apple's [swift-markdown][] and formatted to HTML,
+then loaded into a `WKWebView` that lives in a window which is never shown. The
+web view is printed to a temporary PDF with `NSPrintOperation`, and that
+`PDFDocument` is handed to the normal reader. Nothing on screen is ever a web
+view; WebKit is only the typesetter, and it is what gives us real page breaks,
+selectable text, and clickable link annotations.
+
+Two details matter. The print has to run through
+`runModal(for:delegate:didRun:contextInfo:)` with `canSpawnSeparateThread` set:
+WebKit computes its page range only on a secondary print thread, and
+`NSPrintOperation.run()` never spawns one, which is the usual cause of blank
+output. And margins come from `NSPrintInfo`, not from an `@page` rule, because
+WebKit subtracts the print info's margins itself and setting both doubles them.
+
+The stylesheet is two layers: a base layer of structure and CSS variables, and
+a style layer that sets those variables — a built-in, or a `.css` file from
+`~/Library/Application Support/Folio/Styles` used verbatim. Colours are picked
+for how they look *after* the dark-mode inversion filter, which is a luminance
+flip performed in linear light: code and table-header panels are near-white so
+they come back as dark grays, and the page background must be pure white,
+because even a faintly tinted paper comes back as a visible coloured slab.
+
+Continuous layout is the same pipeline with a different page: the loaded
+document is measured with `scrollHeight` and printed onto a single page as tall
+as its content, with zero margins and the inch of white space supplied by
+`body { padding }`. It is still an ordinary `PDFDocument`, so find, the
+outline, and position memory need to know nothing about it.
 
 ## Icon
 

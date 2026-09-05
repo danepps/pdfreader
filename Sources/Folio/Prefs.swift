@@ -2,6 +2,11 @@ import AppKit
 
 extension Notification.Name {
     static let folioPrefsChanged = Notification.Name("FolioPrefsChanged")
+    /// Posted by a FolioDocument (as `object`) once a new PDFDocument has taken
+    /// the place of the old one -- the first Markdown render, a reload after the
+    /// file changed on disk, or a typography change. `userInfo["initial"]` is
+    /// true for the first render of a window.
+    static let folioDocumentDidReplacePDF = Notification.Name("FolioDocumentDidReplacePDF")
 }
 
 enum AppearanceMode: Int {
@@ -16,6 +21,81 @@ enum AppearanceMode: Int {
     }
 }
 
+/// How rendered Markdown is laid out: real Letter pages, or one tall page the
+/// reader scrolls through without a break.
+enum MarkdownLayout: Int {
+    case pages = 0, continuous = 1
+
+    var title: String {
+        switch self {
+        case .pages: return "Pages"
+        case .continuous: return "Continuous"
+        }
+    }
+}
+
+/// A stylesheet for rendered Markdown: one of the built-ins, whose CSS lives in
+/// `MarkdownHTML`, or a `.css` file the reader dropped into Application Support.
+struct MarkdownStyle: Equatable {
+    var id: String
+    var title: String
+    /// nil for a built-in.
+    var url: URL?
+
+    static let defaultID = "manuscript"
+    static let customPrefix = "custom:"
+
+    static let builtIns: [MarkdownStyle] = [
+        MarkdownStyle(id: "manuscript", title: "Manuscript"),
+        MarkdownStyle(id: "modern", title: "Modern"),
+        MarkdownStyle(id: "github", title: "GitHub"),
+        MarkdownStyle(id: "antique", title: "Antique"),
+        MarkdownStyle(id: "ink", title: "Ink"),
+        MarkdownStyle(id: "academic", title: "Academic")
+    ]
+
+    /// ~/Library/Application Support/Folio/Styles
+    static var folder: URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                               in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent("Library/Application Support")
+        return support.appendingPathComponent("Folio/Styles", isDirectory: true)
+    }
+
+    /// The `.css` files in that folder, in name order. Read every time the Style
+    /// menu opens, so a newly dropped file needs no relaunch.
+    static func customStyles() -> [MarkdownStyle] {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])) ?? []
+        return files
+            .filter { $0.pathExtension.lowercased() == "css" }
+            .map { url in
+                let name = url.deletingPathExtension().lastPathComponent
+                return MarkdownStyle(id: customPrefix + name, title: name, url: url)
+            }
+            .sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+    }
+
+    /// The style layer for an id: a built-in's CSS, or a custom file read from
+    /// disk. A custom style whose file has gone away falls back to the default.
+    static func css(forID id: String) -> String {
+        guard id.hasPrefix(customPrefix) else { return MarkdownHTML.builtInStyle(id) }
+        let name = String(id.dropFirst(customPrefix.count))
+        let url = folder.appendingPathComponent(name).appendingPathExtension("css")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            return MarkdownHTML.builtInStyle(defaultID)
+        }
+        return text
+    }
+}
+
+/// Which pane the sidebar shows.
+enum SidebarMode: Int {
+    case thumbnails = 0, outline = 1
+}
+
 /// User preferences. Small on purpose; everything defaults to "follow the system".
 enum Prefs {
     private static let defaults = UserDefaults.standard
@@ -24,7 +104,15 @@ enum Prefs {
         static let invertInDarkMode = "invertInDarkMode"
         static let appearance = "appearance"
         static let lastPositions = "lastPositions"
+        static let markdownStyle = "markdownStyle"
+        static let markdownLayout = "markdownLayout"
+        static let markdownFontSize = "markdownFontSize"
+        static let sidebarMode = "sidebarMode"
+        static let windowOpacity = "windowOpacity"
     }
+
+    /// Sizes offered in View ▸ Markdown ▸ Size.
+    static let markdownFontSizes = [10, 11, 12, 13]
 
     /// Render page content light-on-dark when the app is in dark mode. Default on.
     static var invertInDarkMode: Bool {
@@ -41,6 +129,71 @@ enum Prefs {
         set {
             defaults.set(newValue.rawValue, forKey: Key.appearance)
             NSApp.appearance = newValue.nsAppearance
+            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+        }
+    }
+
+    /// Preferred sidebar pane. A document with no outline falls back to
+    /// thumbnails without disturbing this.
+    static var sidebarMode: SidebarMode {
+        get { SidebarMode(rawValue: defaults.integer(forKey: Key.sidebarMode)) ?? .thumbnails }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.sidebarMode)
+            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+        }
+    }
+
+    // MARK: Window opacity
+
+    static let minWindowOpacity = 0.3
+    static let maxWindowOpacity = 1.0
+    /// One press of Increase/Decrease Opacity.
+    static let windowOpacityStep = 0.1
+
+    /// Alpha applied to every reader window. Default fully opaque.
+    static var windowOpacity: Double {
+        get { clampOpacity(defaults.object(forKey: Key.windowOpacity) as? Double ?? 1) }
+        set {
+            defaults.set(clampOpacity(newValue), forKey: Key.windowOpacity)
+            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+        }
+    }
+
+    /// Rounded to the step, or repeated ⌥⌘↑ lands on 0.9999… and the menu item
+    /// never notices it has reached the top.
+    private static func clampOpacity(_ value: Double) -> Double {
+        min(max((value * 100).rounded() / 100, minWindowOpacity), maxWindowOpacity)
+    }
+
+    // MARK: Markdown typography
+
+    /// Stylesheet for rendered Markdown, by id. Default the Manuscript built-in.
+    static var markdownStyle: String {
+        get { defaults.string(forKey: Key.markdownStyle) ?? MarkdownStyle.defaultID }
+        set {
+            defaults.set(newValue, forKey: Key.markdownStyle)
+            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+        }
+    }
+
+    /// Paginated or one continuous page. Default paginated.
+    static var markdownLayout: MarkdownLayout {
+        get { MarkdownLayout(rawValue: defaults.integer(forKey: Key.markdownLayout)) ?? .pages }
+        set {
+            defaults.set(newValue.rawValue, forKey: Key.markdownLayout)
+            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+        }
+    }
+
+    /// Body point size for rendered Markdown. Default 11.
+    static var markdownFontSize: Int {
+        get {
+            let stored = defaults.integer(forKey: Key.markdownFontSize)
+            return markdownFontSizes.contains(stored) ? stored : 11
+        }
+        set {
+            guard markdownFontSizes.contains(newValue) else { return }
+            defaults.set(newValue, forKey: Key.markdownFontSize)
             NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
         }
     }

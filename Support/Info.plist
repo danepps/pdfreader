@@ -22,6 +22,20 @@
 			<key>NSDocumentClass</key>
 			<string>FolioDocument</string>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Markdown Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>net.daringfireball.markdown</string>
+			</array>
+			<key>NSDocumentClass</key>
+			<string>FolioDocument</string>
+		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
 	<string>Folio</string>
@@ -59,5 +73,34 @@
 	<string>https://raw.githubusercontent.com/danepps/pdfreader/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>xkEJ4pttphM6v/lHQQ4mbSe9JHQZFe1eOefG26iqyWU=</string>
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Markdown Document</string>
+			<key>UTTypeIdentifier</key>
+			<string>net.daringfireball.markdown</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>md</string>
+					<string>markdown</string>
+					<string>mdown</string>
+					<string>mkdn</string>
+					<string>mkd</string>
+					<string>mdwn</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>text/markdown</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>
