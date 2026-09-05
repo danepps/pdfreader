@@ -1,8 +1,9 @@
 // make-icon-concepts.swift — exploratory Glassine app-icon directions.
 //
-// Produces three light/dark concept pairs plus a review board. These are
-// intentionally separate from the shipping icon pipeline until a direction is
-// selected.
+// Produces light/dark concept pairs and review boards, in three rounds: the
+// first two are the Folio-era directions that led to the shipping Margin Tabs
+// icon, the third takes the Glassine name literally. These are intentionally
+// separate from the shipping icon pipeline until a direction is selected.
 
 // Usage: swift scripts/make-icon-concepts.swift <output-directory>
 
@@ -508,6 +509,409 @@ func image(for concept: RoundTwoConcept, dark: Bool) -> CGImage {
     }
 }
 
+// MARK: - Round three: the name
+
+// Glassine is the semi-transparent, supercalendered paper of archival sleeves,
+// envelope windows and the interleaving tissue in art books: paper you can see
+// through. The app's own signature feature is a window you can see through,
+// with whatever is behind it blurred. Every sheet below is composited the way
+// the app composites its window — the backdrop, blurred, plus a milky tint —
+// rather than faked with a flat wash, so the small sizes tell the truth about
+// how much of the idea actually survives.
+//
+// The tile palette is held constant across all six (the graphite that Margin
+// Tabs shipped on) so what is being compared is the idea, not the colour.
+
+enum RoundThreeConcept: String, CaseIterable {
+    case interleaf = "Interleaf"
+    case windowPanel = "Window Panel"
+    case sleeve = "Sleeve"
+    case frost = "Frost"
+    case onionskin = "Onionskin"
+    case glassineTabs = "Glassine Tabs"
+}
+
+struct GlassPalette {
+    let tileTop: CGColor
+    let tileBottom: CGColor
+    let paper: CGColor
+    let fold: CGColor
+    let ink: CGColor
+    let tint: CGColor    // the sheet's own milkiness, over the blurred backdrop
+    let rim: CGColor
+    let sheen: CGColor
+    let accent: CGColor
+}
+
+func glassPalette(dark: Bool) -> GlassPalette {
+    dark
+        ? GlassPalette(tileTop: rgb(35, 41, 49), tileBottom: rgb(11, 14, 18),
+                       paper: rgb(8, 11, 15), fold: rgb(42, 48, 58),
+                       ink: rgb(240, 244, 250),
+                       tint: rgb(22, 27, 34, 0.62),
+                       rim: rgb(140, 158, 180, 0.85),
+                       sheen: rgb(226, 238, 255, 0.16),
+                       accent: rgb(102, 190, 255))
+        : GlassPalette(tileTop: rgb(82, 88, 96), tileBottom: rgb(34, 39, 45),
+                       paper: rgb(255, 255, 255), fold: rgb(213, 220, 230),
+                       ink: rgb(38, 46, 58),
+                       tint: rgb(240, 245, 250, 0.60),
+                       rim: rgb(255, 255, 255, 0.60),
+                       sheen: rgb(255, 255, 255, 0.28),
+                       accent: rgb(76, 160, 255))
+}
+
+func glassTile(in ctx: CGContext, palette: GlassPalette) {
+    background(in: ctx, top: palette.tileTop, bottom: palette.tileBottom,
+               roundedSquare: true)
+}
+
+// A separable box blur, run three times, which is a good enough Gaussian for a
+// backdrop nobody reads. Pure CoreGraphics buffers so the script still runs as
+// a script; the pixels are premultiplied, which is exactly what averaging wants.
+func blurRows(_ input: [UInt8], _ output: inout [UInt8],
+              width: Int, height: Int, radius: Int) {
+    let window = radius * 2 + 1
+    for y in 0..<height {
+        let row = y * width * 4
+        for channel in 0..<4 {
+            var total = 0
+            for offset in -radius...radius {
+                let x = min(max(offset, 0), width - 1)
+                total += Int(input[row + x * 4 + channel])
+            }
+            for x in 0..<width {
+                output[row + x * 4 + channel] = UInt8(total / window)
+                let leaving = min(max(x - radius, 0), width - 1)
+                let entering = min(max(x + radius + 1, 0), width - 1)
+                total += Int(input[row + entering * 4 + channel])
+                total -= Int(input[row + leaving * 4 + channel])
+            }
+        }
+    }
+}
+
+func blurColumns(_ input: [UInt8], _ output: inout [UInt8],
+                 width: Int, height: Int, radius: Int) {
+    let window = radius * 2 + 1
+    let rowBytes = width * 4
+    for x in 0..<width {
+        let column = x * 4
+        for channel in 0..<4 {
+            var total = 0
+            for offset in -radius...radius {
+                let y = min(max(offset, 0), height - 1)
+                total += Int(input[y * rowBytes + column + channel])
+            }
+            for y in 0..<height {
+                output[y * rowBytes + column + channel] = UInt8(total / window)
+                let leaving = min(max(y - radius, 0), height - 1)
+                let entering = min(max(y + radius + 1, 0), height - 1)
+                total += Int(input[entering * rowBytes + column + channel])
+                total -= Int(input[leaving * rowBytes + column + channel])
+            }
+        }
+    }
+}
+
+func boxBlur(_ pixels: [UInt8], width: Int, height: Int, radius: Int) -> [UInt8] {
+    guard radius > 0 else { return pixels }
+    var source = pixels
+    var scratch = [UInt8](repeating: 0, count: pixels.count)
+    for _ in 0..<3 {
+        blurRows(source, &scratch, width: width, height: height, radius: radius)
+        blurColumns(scratch, &source, width: width, height: height, radius: radius)
+    }
+    return source
+}
+
+// Downsample, blur small, and let the draw-back-up do the rest of the work.
+// A wide blur at 1024 would cost seconds per sheet in an unoptimised script,
+// and nothing in the result would be any different.
+func veil(_ image: CGImage, scale: Int = 8, radius: Int = 4) -> CGImage {
+    let width = max(1, image.width / scale)
+    let height = max(1, image.height / scale)
+    let rowBytes = width * 4
+    var pixels = [UInt8](repeating: 0, count: rowBytes * height)
+    pixels.withUnsafeMutableBytes { buffer in
+        let small = CGContext(data: buffer.baseAddress, width: width, height: height,
+                              bitsPerComponent: 8, bytesPerRow: rowBytes,
+                              space: colorSpace,
+                              bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        small.interpolationQuality = .high
+        small.draw(image, in: CGRect(x: 0, y: 0,
+                                     width: CGFloat(width), height: CGFloat(height)))
+    }
+    let blurred = boxBlur(pixels, width: width, height: height, radius: radius)
+
+    // Copy into a context that owns its memory: `makeImage()` on a context
+    // backed by a client buffer is only a snapshot as long as that buffer
+    // lives, and this one dies with the closure. CG may pad its rows, so the
+    // copy goes row by row rather than in one memcpy.
+    let out = context(width: width, height: height)
+    let destination = out.data!
+    let destinationRowBytes = out.bytesPerRow
+    blurred.withUnsafeBytes { buffer in
+        let base = buffer.baseAddress!
+        for y in 0..<height {
+            memcpy(destination + y * destinationRowBytes, base + y * rowBytes, rowBytes)
+        }
+    }
+    return out.makeImage()!
+}
+
+/// Everything drawn so far, blurred — the backdrop a sheet laid down next will
+/// show. Take it immediately before laying the sheet.
+func veiled(_ ctx: CGContext) -> CGImage {
+    veil(ctx.makeImage()!)
+}
+
+/// Lay a sheet of glassine: a soft shadow, the blurred backdrop, a milky tint,
+/// a sheen along the top edge, and a bright rim. The opaque black under the
+/// tint is only there to give the shadow something to cast from; the backdrop
+/// draw covers it.
+func layGlassine(_ shape: CGPath, backdrop: CGImage, palette: GlassPalette,
+                 in ctx: CGContext, shadow: CGFloat = 0.42, tint: CGColor? = nil) {
+    let bounds = CGRect(x: 0, y: 0, width: canvas, height: canvas)
+    if shadow > 0 {
+        ctx.saveGState()
+        ctx.setShadow(offset: CGSize(width: 0, height: -18), blur: 34,
+                      color: rgb(0, 0, 0, shadow))
+        fill(shape, rgb(0, 0, 0), in: ctx)
+        ctx.restoreGState()
+    }
+
+    let top = shape.boundingBox.maxY
+    ctx.saveGState()
+    ctx.addPath(shape)
+    ctx.clip()
+    ctx.draw(backdrop, in: bounds)
+    ctx.setFillColor(tint ?? palette.tint)
+    ctx.fill(bounds)
+    let sheen = CGGradient(colorsSpace: colorSpace,
+                           colors: [palette.sheen, rgb(255, 255, 255, 0)] as CFArray,
+                           locations: [0, 1])!
+    ctx.drawLinearGradient(sheen,
+                           start: CGPoint(x: 0, y: top),
+                           end: CGPoint(x: 0, y: top - 170), options: [])
+    ctx.restoreGState()
+
+    ctx.addPath(shape)
+    ctx.setStrokeColor(palette.rim)
+    ctx.setLineWidth(4)
+    ctx.strokePath()
+}
+
+/// A grayscale mask for `CGContext.clip(to:mask:)`, ramping bottom to top.
+/// White paints, black hides.
+func fadeMask(top: CGFloat, bottom: CGFloat) -> CGImage {
+    let gray = CGColorSpaceCreateDeviceGray()
+    let ctx = CGContext(data: nil, width: 8, height: 512, bitsPerComponent: 8,
+                        bytesPerRow: 0, space: gray,
+                        bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+    let gradient = CGGradient(colorsSpace: gray,
+                              colors: [CGColor(gray: bottom, alpha: 1),
+                                       CGColor(gray: top, alpha: 1)] as CFArray,
+                              locations: [0, 1])!
+    ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 0),
+                           end: CGPoint(x: 0, y: 512), options: [])
+    return ctx.makeImage()!
+}
+
+// 1. Interleaf. Two sheets: ordinary paper below, a leaf of glassine laid over
+// it, so the type underneath reads softened. What glassine is for, and what the
+// app does to your desktop, are the same picture.
+func drawInterleaf(dark: Bool) -> CGImage {
+    let palette = glassPalette(dark: dark)
+    let ctx = context(width: 1024, height: 1024)
+    glassTile(in: ctx, palette: palette)
+
+    let backRect = CGRect(x: 150, y: 180, width: 500, height: 620)
+    let back = pagePath(backRect, fold: 118)
+    drawPageShadow(back, fillColor: palette.paper, in: ctx, alpha: dark ? 0.62 : 0.40)
+    drawFold(rect: backRect, size: 118, color: palette.fold, in: ctx)
+    for (index, width) in [CGFloat(300), 380, 336, 380, 268].enumerated() {
+        pill(CGRect(x: 206, y: 640 - CGFloat(index) * 88, width: width, height: 26),
+             color: palette.ink, in: ctx)
+    }
+
+    let frontRect = CGRect(x: 340, y: 230, width: 500, height: 620)
+    let front = pagePath(frontRect, fold: 118)
+    layGlassine(front, backdrop: veiled(ctx), palette: palette, in: ctx)
+    drawFold(rect: frontRect, size: 118,
+             color: rgb(255, 255, 255, dark ? 0.22 : 0.45), in: ctx)
+    return ctx.makeImage()!
+}
+
+// 2. Window Panel. One opaque sheet with a glassine panel let into it — the
+// address window of an envelope. Two materials, one shape: an opaque field
+// with a lighter inset rectangle is the version of this set most likely to
+// survive to 16 px.
+func drawWindowPanel(dark: Bool) -> CGImage {
+    let palette = glassPalette(dark: dark)
+    let ctx = context(width: 1024, height: 1024)
+    glassTile(in: ctx, palette: palette)
+
+    // Type on the page behind, drawn first so the window has something to show.
+    // Only what lands inside the panel is ever seen.
+    let panel = CGRect(x: 300, y: 300, width: 424, height: 268)
+    for (index, width) in [CGFloat(330), 286, 232].enumerated() {
+        pill(CGRect(x: 344, y: 486 - CGFloat(index) * 84, width: width, height: 28),
+             color: index == 2 ? palette.accent : rgb(246, 249, 253), in: ctx)
+    }
+    let tile = veiled(ctx)
+
+    let sheetRect = CGRect(x: 232, y: 168, width: 560, height: 688)
+    let sheet = pagePath(sheetRect, fold: 130)
+    drawPageShadow(sheet, fillColor: palette.paper, in: ctx, alpha: dark ? 0.65 : 0.42)
+    drawFold(rect: sheetRect, size: 130, color: palette.fold, in: ctx)
+    for (index, width) in [CGFloat(300), 396, 348].enumerated() {
+        pill(CGRect(x: 300, y: 700 - CGFloat(index) * 62, width: width, height: 26),
+             color: palette.ink, in: ctx)
+    }
+    pill(CGRect(x: 300, y: 232, width: 320, height: 26), color: palette.ink, in: ctx)
+
+    let window = CGPath(roundedRect: panel, cornerWidth: 22, cornerHeight: 22,
+                        transform: nil)
+    layGlassine(window, backdrop: tile, palette: palette, in: ctx, shadow: 0)
+    return ctx.makeImage()!
+}
+
+// 3. Sleeve. A page two-thirds into an archival sleeve: crisp above the lip,
+// veiled below it. The lip is the whole mark once the type stops resolving.
+func drawSleeve(dark: Bool) -> CGImage {
+    let palette = glassPalette(dark: dark)
+    let ctx = context(width: 1024, height: 1024)
+    glassTile(in: ctx, palette: palette)
+
+    let pageRect = CGRect(x: 268, y: 152, width: 488, height: 720)
+    let page = pagePath(pageRect, fold: 116)
+    drawPageShadow(page, fillColor: palette.paper, in: ctx, alpha: dark ? 0.62 : 0.40)
+    drawFold(rect: pageRect, size: 116, color: palette.fold, in: ctx)
+    for (index, width) in [CGFloat(268), 372, 330, 372, 302, 372, 244].enumerated() {
+        pill(CGRect(x: 324, y: 740 - CGFloat(index) * 86, width: width, height: 25),
+             color: palette.ink, in: ctx)
+    }
+
+    let sleeveRect = CGRect(x: 214, y: 128, width: 596, height: 470)
+    let sleeve = CGPath(roundedRect: sleeveRect, cornerWidth: 26, cornerHeight: 26,
+                        transform: nil)
+    layGlassine(sleeve, backdrop: veiled(ctx), palette: palette, in: ctx, shadow: 0.34)
+    pill(CGRect(x: 226, y: sleeveRect.maxY - 16, width: 572, height: 12),
+         color: rgb(255, 255, 255, dark ? 0.34 : 0.66), in: ctx)
+    return ctx.makeImage()!
+}
+
+// 4. Frost. One sheet, opacity ramping top to bottom: crisp type at the top
+// dissolving into the blurred tile at the bottom. This is the window-opacity
+// control drawn as an icon, and the single silhouette of the set — but it is
+// also the one most at risk of fighting Icon Composer's own glass on macOS 26,
+// which is what the tinted and clear appearances need to be checked for.
+func drawFrost(dark: Bool) -> CGImage {
+    let palette = glassPalette(dark: dark)
+    let ctx = context(width: 1024, height: 1024)
+    glassTile(in: ctx, palette: palette)
+    let bounds = CGRect(x: 0, y: 0, width: canvas, height: canvas)
+
+    let rect = CGRect(x: 232, y: 168, width: 560, height: 688)
+    let page = pagePath(rect, fold: 130)
+    layGlassine(page, backdrop: veiled(ctx), palette: palette, in: ctx)
+
+    // The paper and its type on their own layer, then composited through a
+    // vertical ramp so they fade into the glass rather than stopping.
+    let layer = context(width: 1024, height: 1024)
+    fill(page, palette.paper, in: layer)
+    drawFold(rect: rect, size: 130, color: palette.fold, in: layer)
+    for (index, width) in [CGFloat(300), 396, 348, 372, 316, 384, 268].enumerated() {
+        pill(CGRect(x: 300, y: 706 - CGFloat(index) * 78, width: width, height: 26),
+             color: palette.ink, in: layer)
+    }
+    ctx.saveGState()
+    ctx.clip(to: rect, mask: fadeMask(top: 1, bottom: 0.06))
+    ctx.draw(layer.makeImage()!, in: bounds)
+    ctx.restoreGState()
+
+    // Restate the rim over the paper, which covered the one layGlassine drew.
+    ctx.addPath(page)
+    ctx.setStrokeColor(palette.rim)
+    ctx.setLineWidth(4)
+    ctx.strokePath()
+    return ctx.makeImage()!
+}
+
+// 5. Onionskin. Four leaves fanned, each laid over the ones below it, so the
+// overlaps darken on their own rather than being drawn in. Handsome at 1024
+// and the likeliest of the six to collapse into mush at 32.
+func drawOnionskin(dark: Bool) -> CGImage {
+    let palette = glassPalette(dark: dark)
+    let ctx = context(width: 1024, height: 1024)
+    glassTile(in: ctx, palette: palette)
+
+    let base = CGRect(x: 266, y: 196, width: 492, height: 632)
+    let angles: [CGFloat] = [0.20, 0.10, -0.02, -0.13]
+    for (index, angle) in angles.enumerated() {
+        let rect = base.offsetBy(dx: CGFloat(index) * 6 - 9, dy: CGFloat(index) * -4)
+        let leaf = transformed(pagePath(rect, fold: 112),
+                               around: CGPoint(x: rect.midX, y: rect.midY), angle: angle)
+        layGlassine(leaf, backdrop: veiled(ctx), palette: palette, in: ctx,
+                    shadow: 0.26,
+                    tint: dark ? rgb(22, 27, 34, 0.34) : rgb(240, 245, 250, 0.34))
+    }
+
+    let topRect = base.offsetBy(dx: 9, dy: -12)
+    ctx.saveGState()
+    ctx.translateBy(x: topRect.midX, y: topRect.midY)
+    ctx.rotate(by: angles[angles.count - 1])
+    ctx.translateBy(x: -topRect.midX, y: -topRect.midY)
+    for (index, width) in [CGFloat(268), 340, 296, 340].enumerated() {
+        pill(CGRect(x: 330, y: 600 - CGFloat(index) * 84, width: width, height: 25),
+             color: palette.ink, in: ctx)
+    }
+    ctx.restoreGState()
+    return ctx.makeImage()!
+}
+
+// 6. Glassine Tabs. The shipping icon's geometry with the sheet made
+// translucent, so the tile gradient and the buried ends of the margin tabs
+// come through it. The low-risk option: the small-size tuning, the document
+// icon family and the Markdown .icns all keep working, and the name gets
+// acknowledged. The payoff is correspondingly small.
+func drawGlassineTabs(dark: Bool) -> CGImage {
+    let palette = glassPalette(dark: dark)
+    let ctx = context(width: 1024, height: 1024)
+    glassTile(in: ctx, palette: palette)
+
+    let rect = CGRect(x: 214, y: 168, width: 546, height: 686)
+    let tabColors = [rgb(255, 91, 91), rgb(255, 190, 48),
+                     rgb(46, 210, 171), rgb(76, 160, 255)]
+    for (index, color) in tabColors.enumerated() {
+        let tab = CGPath(roundedRect: CGRect(x: 716, y: 606 - CGFloat(index) * 104,
+                                             width: 126, height: 62),
+                         cornerWidth: 18, cornerHeight: 18, transform: nil)
+        fill(tab, color, in: ctx)
+    }
+
+    let sheet = pagePath(rect, fold: 132)
+    layGlassine(sheet, backdrop: veiled(ctx), palette: palette, in: ctx)
+    drawFold(rect: rect, size: 132,
+             color: rgb(255, 255, 255, dark ? 0.20 : 0.42), in: ctx)
+    for y in [CGFloat(680), 617, 554, 491, 428] {
+        pill(CGRect(x: 292, y: y, width: 380, height: 26), color: palette.ink, in: ctx)
+    }
+    return ctx.makeImage()!
+}
+
+func image(for concept: RoundThreeConcept, dark: Bool) -> CGImage {
+    switch concept {
+    case .interleaf: return drawInterleaf(dark: dark)
+    case .windowPanel: return drawWindowPanel(dark: dark)
+    case .sleeve: return drawSleeve(dark: dark)
+    case .frost: return drawFrost(dark: dark)
+    case .onionskin: return drawOnionskin(dark: dark)
+    case .glassineTabs: return drawGlassineTabs(dark: dark)
+    }
+}
+
 func write(_ image: CGImage, to url: URL) {
     let destination = CGImageDestinationCreateWithURL(
         url as CFURL, UTType.png.identifier as CFString, 1, nil)!
@@ -816,4 +1220,50 @@ equalLinesBoard.draw(equalLinesLight, in: CGRect(x: 826, y: 452, width: 32, heig
 equalLinesBoard.draw(equalLinesDark, in: CGRect(x: 1660, y: 520, width: 64, height: 64))
 equalLinesBoard.draw(equalLinesDark, in: CGRect(x: 1676, y: 452, width: 32, height: 32))
 write(equalLinesBoard.makeImage()!, to: output.appendingPathComponent("glassine-margin-tabs-clean-rounded-equal-lines-pair.png"))
+
+var roundThreeImages: [String: CGImage] = [:]
+for concept in RoundThreeConcept.allCases {
+    for dark in [false, true] {
+        let rendered = image(for: concept, dark: dark)
+        let suffix = dark ? "dark" : "light"
+        roundThreeImages["\(concept.rawValue)-\(suffix)"] = rendered
+        let stem = concept.rawValue.lowercased().replacingOccurrences(of: " ", with: "-")
+        write(rendered, to: output.appendingPathComponent("glassine-concept-v3-\(stem)-\(suffix).png"))
+    }
+}
+
+let boardThree = context(width: 3000, height: 2280)
+boardThree.setFillColor(rgb(236, 239, 243))
+boardThree.fill(CGRect(x: 0, y: 0, width: 3000, height: 2280))
+label("Glassine — directions from the name", at: CGPoint(x: 120, y: 2170),
+      size: 58, color: rgb(28, 35, 45), in: boardThree)
+label("Translucent paper over a blurred backdrop · graphite tile held constant · 64 px and 32 px checks",
+      at: CGPoint(x: 122, y: 2106), size: 29, color: rgb(91, 101, 114), in: boardThree)
+
+for (index, concept) in RoundThreeConcept.allCases.enumerated() {
+    let column = index % 3
+    let row = index / 3
+    let x = CGFloat(column) * 960 + 100
+    let y = row == 0 ? CGFloat(1120) : CGFloat(120)
+    label("\(index + 1)  \(concept.rawValue)", at: CGPoint(x: x, y: y + 820),
+          size: 38, color: rgb(32, 40, 51), in: boardThree)
+    label("LIGHT", at: CGPoint(x: x, y: y + 760), size: 18,
+          color: rgb(91, 101, 114), in: boardThree)
+    label("DARK", at: CGPoint(x: x + 430, y: y + 760), size: 18,
+          color: rgb(91, 101, 114), in: boardThree)
+    let light = roundThreeImages["\(concept.rawValue)-light"]!
+    let dark = roundThreeImages["\(concept.rawValue)-dark"]!
+    boardThree.draw(light, in: CGRect(x: x, y: y + 280, width: 410, height: 410))
+    boardThree.draw(dark, in: CGRect(x: x + 430, y: y + 280, width: 410, height: 410))
+    label("64", at: CGPoint(x: x + 4, y: y + 210), size: 16,
+          color: rgb(116, 125, 137), in: boardThree)
+    label("32", at: CGPoint(x: x + 98, y: y + 210), size: 16,
+          color: rgb(116, 125, 137), in: boardThree)
+    boardThree.draw(light, in: CGRect(x: x, y: y + 120, width: 64, height: 64))
+    boardThree.draw(light, in: CGRect(x: x + 96, y: y + 136, width: 32, height: 32))
+    boardThree.draw(dark, in: CGRect(x: x + 430, y: y + 120, width: 64, height: 64))
+    boardThree.draw(dark, in: CGRect(x: x + 526, y: y + 136, width: 32, height: 32))
+}
+
+write(boardThree.makeImage()!, to: output.appendingPathComponent("glassine-icon-concepts-v3-board.png"))
 print("wrote concepts to \(output.path)")
