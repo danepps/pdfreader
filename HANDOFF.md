@@ -208,6 +208,23 @@ variant flips the page to black. `scripts/make-icon-concepts.swift` renders
 the alternatives that were considered into `Support/IconConcepts/` (gitignored,
 ~57 MB).
 
+The icon still predates the rename and says nothing about the name, so that
+script now has a **round three** (`RoundThreeConcept`, board
+`glassine-icon-concepts-v3-board.png`) taking Glassine literally — translucent
+paper: Interleaf, Window Panel, Sleeve, Frost, Onionskin, and a translucent
+Margin Tabs. Every sheet is composited the way the app composites its window
+rather than washed flat: `veiled(ctx)` snapshots what has been drawn so far and
+blurs it (downsample, three box-blur passes, draw back up), and `layGlassine`
+lays that backdrop under a milky tint, a top-edge sheen and a bright rim. The
+tile palette is held constant across all six so the comparison is of the idea.
+Nothing here is wired to the shipping pipeline, and none of it has been run:
+the round was written on Linux, where there is no Swift toolchain and no
+CoreGraphics, so it has never been compiled. Two things to check on a Mac
+before reading anything into the output — the `clip(to:mask:)` sense in
+`fadeMask` (Frost fades the wrong way if white hides rather than paints), and
+the whole round in Icon Composer's tinted and clear appearances on macOS 26,
+where the system's own glass competes with the artwork's.
+
 The **Markdown document icon** (the Finder icon for a `.md` file) is separate:
 `swift scripts/make-doc-icon.swift` writes the committed
 `Support/MarkdownDocument.icns` (10 entries, 16–512 pt at 1× and 2×), which
