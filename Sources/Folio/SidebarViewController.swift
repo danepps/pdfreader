@@ -2,13 +2,36 @@ import AppKit
 import CoreImage
 import PDFKit
 
-/// Page thumbnails. PDFThumbnailView does the selection sync with the PDFView
-/// on its own, so there is nothing else to wire up.
-final class SidebarViewController: NSViewController {
+/// The sidebar: page thumbnails or the document's outline, chosen by a
+/// segmented control at the top. PDFThumbnailView does the selection sync with
+/// the PDFView on its own; the outline view is driven from here.
+final class SidebarViewController: NSViewController, NSOutlineViewDataSource,
+                                   NSOutlineViewDelegate {
 
     private let thumbnailView = PDFThumbnailView()
+    private let outlineView = NSOutlineView()
+    private let outlineScrollView = NSScrollView()
+    private let modeControl = NSSegmentedControl()
     private let pdfView: PDFView
     private var pendingFilters: [CIFilter] = []
+    private var outlineRoot: PDFOutline?
+    /// Set while the reading position is driving the selection, so the
+    /// selection handler does not turn around and navigate.
+    private var isSyncingSelection = false
+
+    private static let cellIdentifier = NSUserInterfaceItemIdentifier("folio.outlineCell")
+
+    var hasOutline: Bool { (outlineRoot?.numberOfChildren ?? 0) > 0 }
+
+    private var storedMode: SidebarMode = .thumbnails
+
+    var mode: SidebarMode {
+        get { storedMode }
+        set {
+            storedMode = newValue
+            if isViewLoaded { applyMode() }
+        }
+    }
 
     init(pdfView: PDFView) {
         self.pdfView = pdfView
@@ -19,11 +42,47 @@ final class SidebarViewController: NSViewController {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
     override func loadView() {
-        view = thumbnailView
+        view = NSView()
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        storedMode = Prefs.sidebarMode
+        buildModeControl()
+        buildThumbnails()
+        buildOutline()
+        applyMode()
+    }
+
+    // MARK: Construction
+
+    private func buildModeControl() {
+        modeControl.segmentCount = 2
+        modeControl.segmentStyle = .texturedRounded
+        modeControl.trackingMode = .selectOne
+        modeControl.setImage(NSImage(systemSymbolName: "square.grid.2x2",
+                                     accessibilityDescription: "Thumbnails"),
+                             forSegment: SidebarMode.thumbnails.rawValue)
+        modeControl.setImage(NSImage(systemSymbolName: "list.bullet",
+                                     accessibilityDescription: "Table of Contents"),
+                             forSegment: SidebarMode.outline.rawValue)
+        modeControl.setToolTip("Thumbnails (\u{2325}\u{2318}2)",
+                               forSegment: SidebarMode.thumbnails.rawValue)
+        modeControl.setToolTip("Table of Contents (\u{2325}\u{2318}3)",
+                               forSegment: SidebarMode.outline.rawValue)
+        modeControl.setEnabled(false, forSegment: SidebarMode.outline.rawValue)
+        modeControl.target = self
+        modeControl.action = #selector(modeChanged(_:))
+        modeControl.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(modeControl)
+
+        NSLayoutConstraint.activate([
+            modeControl.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            modeControl.topAnchor.constraint(equalTo: view.topAnchor, constant: 8)
+        ])
+    }
+
+    private func buildThumbnails() {
         thumbnailView.pdfView = pdfView
         thumbnailView.thumbnailSize = NSSize(width: 120, height: 160)
         thumbnailView.maximumNumberOfColumns = 1
@@ -31,17 +90,181 @@ final class SidebarViewController: NSViewController {
         thumbnailView.backgroundColor = .clear
         thumbnailView.wantsLayer = true
         thumbnailView.contentFilters = pendingFilters
+        pin(thumbnailView)
+    }
+
+    private func buildOutline() {
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("folio.outline"))
+        column.resizingMask = .autoresizingMask
+        outlineView.addTableColumn(column)
+        outlineView.outlineTableColumn = column
+        outlineView.headerView = nil
+        outlineView.style = .sourceList
+        outlineView.backgroundColor = .clear
+        outlineView.rowHeight = 22
+        outlineView.indentationPerLevel = 14
+        outlineView.autoresizesOutlineColumn = false
+        outlineView.dataSource = self
+        outlineView.delegate = self
+
+        outlineScrollView.documentView = outlineView
+        outlineScrollView.hasVerticalScroller = true
+        outlineScrollView.drawsBackground = false
+        outlineScrollView.contentView.drawsBackground = false
+        outlineScrollView.automaticallyAdjustsContentInsets = false
+        pin(outlineScrollView)
+    }
+
+    /// Both panes fill the area under the mode control.
+    private func pin(_ subview: NSView) {
+        subview.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(subview)
+        NSLayoutConstraint.activate([
+            subview.topAnchor.constraint(equalTo: modeControl.bottomAnchor, constant: 8),
+            subview.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            subview.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            subview.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+    }
+
+    // MARK: Mode
+
+    private func applyMode() {
+        let showOutline = storedMode == .outline && hasOutline
+        outlineScrollView.isHidden = !showOutline
+        thumbnailView.isHidden = showOutline
+        modeControl.selectedSegment = showOutline
+            ? SidebarMode.outline.rawValue : SidebarMode.thumbnails.rawValue
+        if showOutline { syncSelection() }
+    }
+
+    @objc private func modeChanged(_ sender: NSSegmentedControl) {
+        guard let selected = SidebarMode(rawValue: sender.selectedSegment) else { return }
+        Prefs.sidebarMode = selected
+        mode = selected
     }
 
     /// The reader swapped its PDFView's document (a Markdown render or reload).
-    /// PDFThumbnailView observes its pdfView and rebuilds itself, so there is
-    /// nothing to reassign here -- verified 2026-09-04 by watching thumbnails
+    /// PDFThumbnailView observes its pdfView and rebuilds itself, so only the
+    /// outline needs reloading -- verified 2026-09-04 by watching thumbnails
     /// appear for a Markdown document, whose PDF arrives after the view loads.
-    func documentDidChange() {}
+    func documentDidChange() {
+        guard isViewLoaded else { return }
+        outlineRoot = pdfView.document?.outlineRoot
+        outlineView.reloadData()
+        outlineView.expandItem(nil, expandChildren: true)
+        modeControl.setEnabled(hasOutline, forSegment: SidebarMode.outline.rawValue)
+        storedMode = hasOutline ? Prefs.sidebarMode : .thumbnails
+        applyMode()
+    }
 
-    /// Same inversion filters as the reader, so thumbnails match the pages.
+    /// Same inversion filters as the reader, so thumbnails match the pages. The
+    /// outline is native text and is deliberately left unfiltered.
     func setContentFilters(_ filters: [CIFilter]) {
         pendingFilters = filters
         if isViewLoaded { thumbnailView.contentFilters = filters }
+    }
+
+    // MARK: Selection
+
+    private func destination(of node: PDFOutline) -> PDFDestination? {
+        // Real PDFs use either form.
+        node.destination ?? (node.action as? PDFActionGoTo)?.destination
+    }
+
+    /// Page index and downward offset of a destination, so positions compare
+    /// as a plain tuple (PDF y grows upwards). The y is clamped to the top of
+    /// the page: PDFView's own destination sits a gutter's height above it, and
+    /// an unspecified destination in a real PDF is a huge number.
+    private func ordinal(_ page: PDFPage, _ y: CGFloat) -> (Int, CGFloat)? {
+        guard let index = pdfView.document?.index(for: page), index != NSNotFound else {
+            return nil
+        }
+        return (index, -min(y, page.bounds(for: .cropBox).maxY))
+    }
+
+    private var currentOrdinal: (Int, CGFloat)? {
+        if let destination = pdfView.currentDestination, let page = destination.page,
+           let ordinal = ordinal(page, destination.point.y) {
+            return ordinal
+        }
+        guard let page = pdfView.currentPage else { return nil }
+        return ordinal(page, page.bounds(for: .mediaBox).maxY)
+    }
+
+    /// Highlight the last entry, in pre-order, that starts at or before the
+    /// reading position. Never navigates.
+    func syncSelection() {
+        guard isViewLoaded, !outlineScrollView.isHidden, hasOutline,
+              let here = currentOrdinal else { return }
+
+        var best = -1
+        for row in 0..<outlineView.numberOfRows {
+            guard let node = outlineView.item(atRow: row) as? PDFOutline,
+                  let target = destination(of: node), let page = target.page,
+                  let start = ordinal(page, target.point.y) else { continue }
+            if start <= here { best = row }
+        }
+        guard best != outlineView.selectedRow else { return }
+
+        isSyncingSelection = true
+        if best >= 0 {
+            outlineView.selectRowIndexes(IndexSet(integer: best), byExtendingSelection: false)
+            outlineView.scrollRowToVisible(best)
+        } else {
+            outlineView.deselectAll(nil)
+        }
+        isSyncingSelection = false
+    }
+
+    func outlineViewSelectionDidChange(_ notification: Notification) {
+        guard !isSyncingSelection,
+              let node = outlineView.item(atRow: outlineView.selectedRow) as? PDFOutline,
+              let target = destination(of: node) else { return }
+        pdfView.go(to: target)
+    }
+
+    // MARK: Outline data
+
+    private func node(for item: Any?) -> PDFOutline? {
+        (item as? PDFOutline) ?? outlineRoot
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?) -> Int {
+        node(for: item)?.numberOfChildren ?? 0
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, child index: Int, ofItem item: Any?) -> Any {
+        node(for: item)?.child(at: index) ?? PDFOutline()
+    }
+
+    func outlineView(_ outlineView: NSOutlineView, isItemExpandable item: Any) -> Bool {
+        ((item as? PDFOutline)?.numberOfChildren ?? 0) > 0
+    }
+
+    func outlineView(_ outlineView: NSOutlineView,
+                     viewFor tableColumn: NSTableColumn?, item: Any) -> NSView? {
+        let cell = outlineView.makeView(withIdentifier: Self.cellIdentifier, owner: self)
+            as? NSTableCellView ?? makeCell()
+        cell.textField?.stringValue = (item as? PDFOutline)?.label ?? ""
+        return cell
+    }
+
+    private func makeCell() -> NSTableCellView {
+        let cell = NSTableCellView()
+        cell.identifier = Self.cellIdentifier
+        let label = NSTextField(labelWithString: "")
+        label.font = .systemFont(ofSize: 13)
+        label.textColor = .labelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.translatesAutoresizingMaskIntoConstraints = false
+        cell.addSubview(label)
+        cell.textField = label
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 2),
+            label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+            label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
+        ])
+        return cell
     }
 }

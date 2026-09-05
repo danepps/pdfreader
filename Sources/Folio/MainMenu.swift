@@ -30,6 +30,9 @@ enum MainMenu {
 
     // MARK: Builders
 
+    private static let upArrowKey = String(UnicodeScalar(NSUpArrowFunctionKey)!)
+    private static let downArrowKey = String(UnicodeScalar(NSDownArrowFunctionKey)!)
+
     private static func submenu(_ menu: NSMenu) -> NSMenuItem {
         let item = NSMenuItem(title: menu.title, action: nil, keyEquivalent: "")
         item.submenu = menu
@@ -130,6 +133,11 @@ enum MainMenu {
         let menu = NSMenu(title: "View")
         add(menu, "Show Sidebar", #selector(NSSplitViewController.toggleSidebar(_:)),
             key: "s", modifiers: [.command, .control])
+        // Preview's shortcuts for the same two panes.
+        add(menu, "Thumbnails", #selector(ReaderWindowController.showThumbnails(_:)),
+            key: "2", modifiers: [.command, .option])
+        add(menu, "Table of Contents", #selector(ReaderWindowController.showOutline(_:)),
+            key: "3", modifiers: [.command, .option])
         menu.addItem(.separator())
         add(menu, "Zoom In", #selector(PDFView.zoomIn(_:)), key: "=")
         add(menu, "Zoom Out", #selector(PDFView.zoomOut(_:)), key: "-")
@@ -151,12 +159,32 @@ enum MainMenu {
         add(menu, "Invert Page Colors in Dark Mode",
             #selector(AppDelegate.toggleInvertInDarkMode(_:)), target: appDelegate)
 
+        let opacity = NSMenuItem(title: "Window Opacity", action: nil, keyEquivalent: "")
+        opacity.view = OpacityMenuItemView()
+        menu.addItem(opacity)
+        add(menu, "Increase Opacity", #selector(AppDelegate.increaseOpacity(_:)),
+            key: upArrowKey, modifiers: [.command, .option], target: appDelegate)
+        add(menu, "Decrease Opacity", #selector(AppDelegate.decreaseOpacity(_:)),
+            key: downArrowKey, modifiers: [.command, .option], target: appDelegate)
+
         let markdown = NSMenuItem(title: "Markdown", action: nil, keyEquivalent: "")
         let markdownMenu = NSMenu(title: "Markdown")
-        for typeface in MarkdownTypeface.allCases {
-            add(markdownMenu, typeface.title, #selector(AppDelegate.setMarkdownTypeface(_:)),
-                target: appDelegate, tag: typeface.rawValue)
+        for layout in [MarkdownLayout.pages, .continuous] {
+            add(markdownMenu, layout.title, #selector(AppDelegate.setMarkdownLayout(_:)),
+                target: appDelegate, tag: layout.rawValue)
         }
+        markdownMenu.addItem(.separator())
+
+        let style = NSMenuItem(title: "Style", action: nil, keyEquivalent: "")
+        let styleMenu = NSMenu(title: "Style")
+        // Rebuilt every time it opens, so a .css file dropped into the Styles
+        // folder appears without a relaunch.
+        styleMenu.identifier = markdownStyleMenuIdentifier
+        styleMenu.delegate = appDelegate
+        populateMarkdownStyleMenu(styleMenu, appDelegate: appDelegate)
+        style.submenu = styleMenu
+        markdownMenu.addItem(style)
+
         markdownMenu.addItem(.separator())
         for size in Prefs.markdownFontSizes {
             add(markdownMenu, "\(size) pt", #selector(AppDelegate.setMarkdownFontSize(_:)),
@@ -168,6 +196,31 @@ enum MainMenu {
         add(menu, "Enter Full Screen", #selector(NSWindow.toggleFullScreen(_:)),
             key: "f", modifiers: [.command, .control])
         return menu
+    }
+
+    /// Marks the one menu the app delegate rebuilds in `menuNeedsUpdate`.
+    static let markdownStyleMenuIdentifier = NSUserInterfaceItemIdentifier("folio.markdownStyle")
+
+    /// Fill View ▸ Markdown ▸ Style: the built-ins, then whatever `.css` files
+    /// are in the Styles folder right now, then the way to that folder. The
+    /// style's id rides on `representedObject`, since ids are strings and a
+    /// menu item's tag is not.
+    static func populateMarkdownStyleMenu(_ menu: NSMenu, appDelegate: AppDelegate) {
+        menu.removeAllItems()
+        let action = #selector(AppDelegate.setMarkdownStyle(_:))
+        for style in MarkdownStyle.builtIns {
+            add(menu, style.title, action, target: appDelegate).representedObject = style.id
+        }
+        let custom = MarkdownStyle.customStyles()
+        if !custom.isEmpty {
+            menu.addItem(.separator())
+            for style in custom {
+                add(menu, style.title, action, target: appDelegate).representedObject = style.id
+            }
+        }
+        menu.addItem(.separator())
+        add(menu, "Open Styles Folder…",
+            #selector(AppDelegate.openMarkdownStylesFolder(_:)), target: appDelegate)
     }
 
     private static func goMenu() -> NSMenu {
@@ -192,6 +245,82 @@ enum MainMenu {
         menu.addItem(.separator())
         add(menu, "Bring All to Front", #selector(NSApplication.arrangeInFront(_:)))
         return menu
+    }
+}
+
+/// The View ▸ Window Opacity row: caption, slider, live percentage. A menu item
+/// with a custom view draws none of the usual chrome, so the leading inset is
+/// hand-matched to the title inset of the plain items around it.
+final class OpacityMenuItemView: NSView {
+
+    private let slider = NSSlider()
+    private let percentLabel = NSTextField(labelWithString: "100%")
+
+    init() {
+        super.init(frame: .zero)
+
+        let menuFont = NSFont.menuFont(ofSize: 0)
+        let caption = NSTextField(labelWithString: "Opacity")
+        caption.font = menuFont
+        caption.textColor = .labelColor
+        percentLabel.font = NSFont.monospacedDigitSystemFont(ofSize: menuFont.pointSize,
+                                                             weight: .regular)
+        percentLabel.textColor = .labelColor
+        percentLabel.alignment = .right
+
+        slider.minValue = Prefs.minWindowOpacity
+        slider.maxValue = Prefs.maxWindowOpacity
+        slider.isContinuous = true
+        slider.controlSize = .small
+        slider.target = self
+        slider.action = #selector(sliderMoved)
+        slider.setAccessibilityLabel("Window opacity")
+
+        for subview in [caption, slider, percentLabel] as [NSView] {
+            subview.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(subview)
+        }
+
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 24),
+            caption.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 20),
+            caption.centerYAnchor.constraint(equalTo: centerYAnchor),
+            slider.leadingAnchor.constraint(equalTo: caption.trailingAnchor, constant: 10),
+            slider.centerYAnchor.constraint(equalTo: centerYAnchor),
+            slider.widthAnchor.constraint(equalToConstant: 150),
+            percentLabel.leadingAnchor.constraint(equalTo: slider.trailingAnchor, constant: 10),
+            percentLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            percentLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 38),
+            percentLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14)
+        ])
+
+        // A menu sizes an item's view from its frame, not its constraints.
+        frame = NSRect(origin: .zero, size: fittingSize)
+        sync()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    /// The menu builds a fresh window every time it opens, so this is where the
+    /// row picks up an opacity the keyboard shortcuts changed behind its back.
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil { sync() }
+    }
+
+    private func sync() {
+        slider.doubleValue = Prefs.windowOpacity
+        showPercent(Prefs.windowOpacity)
+    }
+
+    private func showPercent(_ value: Double) {
+        percentLabel.stringValue = "\(Int((value * 100).rounded()))%"
+    }
+
+    @objc private func sliderMoved() {
+        Prefs.windowOpacity = slider.doubleValue
+        showPercent(slider.doubleValue)
     }
 }
 

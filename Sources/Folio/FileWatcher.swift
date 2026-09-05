@@ -44,7 +44,16 @@ final class FileWatcher {
         queue.async { [weak self] in self?.openSources() }
     }
 
-    deinit { stop() }
+    /// Not `stop()`: the last reference can be dropped from inside one of the
+    /// watcher's own queue blocks, and then `queue.sync` would deadlock on the
+    /// serial queue it is already running on. Nothing else can reach these
+    /// fields during deinit, so touch them directly.
+    deinit {
+        stopped = true
+        pending?.cancel()
+        fileSource?.cancel()
+        directorySource?.cancel()
+    }
 
     func stop() {
         queue.sync {

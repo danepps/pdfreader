@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 /// Application delegate. Deliberately thin: NSDocumentController does the file
 /// handling, and each window controller owns its own state.
-final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, NSMenuDelegate {
 
     /// Sparkle. Starting the updater here (rather than lazily) lets it run its
     /// scheduled background check; `SUEnableAutomaticChecks` in Info.plist is
@@ -48,13 +48,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         Prefs.invertInDarkMode.toggle()
     }
 
-    @objc func setMarkdownTypeface(_ sender: NSMenuItem) {
-        guard let typeface = MarkdownTypeface(rawValue: sender.tag) else { return }
-        Prefs.markdownTypeface = typeface
+    @objc func increaseOpacity(_ sender: Any?) {
+        Prefs.windowOpacity += Prefs.windowOpacityStep
+    }
+
+    @objc func decreaseOpacity(_ sender: Any?) {
+        Prefs.windowOpacity -= Prefs.windowOpacityStep
+    }
+
+    @objc func setMarkdownStyle(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        Prefs.markdownStyle = id
+    }
+
+    @objc func setMarkdownLayout(_ sender: NSMenuItem) {
+        guard let layout = MarkdownLayout(rawValue: sender.tag) else { return }
+        Prefs.markdownLayout = layout
     }
 
     @objc func setMarkdownFontSize(_ sender: NSMenuItem) {
         Prefs.markdownFontSize = sender.tag
+    }
+
+    /// Open ~/Library/Application Support/Folio/Styles in the Finder, creating
+    /// it the first time, so a custom stylesheet has somewhere obvious to go.
+    @objc func openMarkdownStylesFolder(_ sender: NSMenuItem) {
+        let folder = MarkdownStyle.folder
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        } catch {
+            NSAlert(error: error).runModal()
+            return
+        }
+        NSWorkspace.shared.open(folder)
+    }
+
+    /// The Style submenu is rebuilt on every open: custom styles are files, and
+    /// files appear and vanish while the app is running.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu.identifier == MainMenu.markdownStyleMenuIdentifier else { return }
+        MainMenu.populateMarkdownStyleMenu(menu, appDelegate: self)
     }
 
     /// Hand LaunchServices this copy of Folio as the handler for .md files.
@@ -90,8 +123,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
             menuItem.state = (menuItem.tag == Prefs.appearance.rawValue) ? .on : .off
         case #selector(toggleInvertInDarkMode(_:)):
             menuItem.state = Prefs.invertInDarkMode ? .on : .off
-        case #selector(setMarkdownTypeface(_:)):
-            menuItem.state = (menuItem.tag == Prefs.markdownTypeface.rawValue) ? .on : .off
+        case #selector(increaseOpacity(_:)):
+            return Prefs.windowOpacity < Prefs.maxWindowOpacity
+        case #selector(decreaseOpacity(_:)):
+            return Prefs.windowOpacity > Prefs.minWindowOpacity
+        case #selector(setMarkdownStyle(_:)):
+            let id = menuItem.representedObject as? String
+            menuItem.state = (id == Prefs.markdownStyle) ? .on : .off
+        case #selector(setMarkdownLayout(_:)):
+            menuItem.state = (menuItem.tag == Prefs.markdownLayout.rawValue) ? .on : .off
         case #selector(setMarkdownFontSize(_:)):
             menuItem.state = (menuItem.tag == Prefs.markdownFontSize) ? .on : .off
         case #selector(makeDefaultMarkdownApp(_:)):

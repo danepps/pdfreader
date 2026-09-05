@@ -49,6 +49,64 @@ Dan's stated requirements, all met as of this handoff:
   both a Markdown and a PDF document, tabs, and the default-app checkmark.
   Not verified by machine: the dark-mode *look* of a rendered memo (the pipeline
   is unaffected, but the colours want a human eye).
+- Outline sidebar landed 2026-09-04: a second sidebar pane listing the
+  document's chapters, from `PDFDocument.outlineRoot` for a real PDF and
+  synthesised from the headings for Markdown. View ▸ Thumbnails (⌥⌘2) /
+  Table of Contents (⌥⌘3), remembered in `Prefs.sidebarMode`. Runtime-verified:
+  the tree and its nesting for both kinds, an h1→h3 jump, a heading that wraps
+  onto two lines yielding one entry, clicking a row navigating, the selection
+  following the reading position, the outline refreshing on a file change, and
+  an exported Markdown PDF carrying the bookmarks with no `folio-outline` links
+  left. Dark mode checked by screenshot.
+- Window opacity landed 2026-09-04: `Prefs.windowOpacity` (0.3–1.0, default 1)
+  drives `window.alphaValue` on every reader window, applied at init and on
+  `.folioPrefsChanged` so tabs (separate windows) follow. View ▸ Window Opacity
+  is a menu item with a custom view (`OpacityMenuItemView` in `MainMenu.swift`:
+  caption, 150 pt continuous slider, live monospaced-digit percentage), plus
+  Increase/Decrease Opacity at ⌥⌘↑ / ⌥⌘↓, which step by 0.1 and disable at the
+  ends. The row re-reads the pref in `viewDidMoveToWindow`, because a menu
+  builds a fresh window each time it opens and the shortcuts can have moved the
+  value behind its back. The stored value is rounded to two decimals, or
+  repeated ⌥⌘↑ lands on 0.9999… and Increase Opacity never greys out.
+  Runtime-verified: dragging the slider to 30% and back, the live percentage,
+  the ⌥⌘↑/⌥⌘↓ steps, and both tabs of a two-tab window going translucent
+  together. The menu bar follows the *system* appearance, not the app's, so the
+  dark-menu look could not be forced from `Prefs.appearance`; the row uses
+  `.labelColor` throughout and was checked in a light menu.
+- Page-field editing feedback landed 2026-09-04: `PageIndicatorContainer` gets a
+  1.5 pt `controlAccentColor` ring (cornerRadius 6) while the field is being
+  edited, the field's accent wash went 0.12 → 0.18, and the placeholder reads
+  "1–N" so an emptied field still states the range. The ring's `CGColor` is
+  pinned to the container's appearance and re-applied from
+  `viewDidChangeEffectiveAppearance`. Runtime-verified in light and dark: the
+  ring on click, the placeholder on an emptied field, Escape returning to
+  "N of M" without navigating, a typed number + Return navigating, and clicking
+  elsewhere ending the edit.
+- The reported "page field is in edit mode after a Markdown reload" **did not
+  reproduce** (2026-09-04), on either the current build or one with the guards
+  stripped out: append to an open `.md` from another app, switch back, and the
+  capsule is still the plain label. Two guards went in anyway and are cheap:
+  `pageField.refusesFirstResponder` is true except between `beginPageEdit` and
+  `endPageEdit`, so the key-view loop can never land in it; and `finishInstall`
+  re-asserts `makeFirstResponder(pdfView)` when a document swap has left the
+  window itself as first responder. If it ever comes back, that is where to look.
+- Markdown styles, continuous layout and word count landed 2026-09-04.
+  View ▸ Markdown is now Pages/Continuous, a Style submenu (six built-ins, the
+  `.css` files in `~/Library/Application Support/Folio/Styles`, and "Open
+  Styles Folder…"), and the size list; `MarkdownTypeface` is gone, replaced by
+  `Prefs.markdownStyle` (a string id). The window subtitle reads
+  "6,433 words · 26 min". Runtime-verified in the built app: every preset
+  applied from the menu and checkmarked; a `.css` file appearing in the Style
+  menu while the app ran, applying when picked, and disappearing again when
+  deleted; Continuous rendering a 22-page memo as one 612 × 13,757 pt page with
+  the page indicator removed from the toolbar and restored (at its own slot,
+  correctly sized) on the way back to Pages; the outline sidebar listing and
+  navigating that single page, with the selection following the reading
+  position; ⇧⌘E from a continuous document exporting 22 Letter pages with the
+  bookmarks and no `folio-outline` links; the subtitle updating on a save. The
+  presets were also judged from the PDFs themselves, light and with the
+  inversion filter applied — see the pitfalls below for what that changed.
+  Not verified: nothing known.
 - v1.0.0 and v1.0.1 released 2026-09-04 (public repo, MIT). The Sparkle
   path is proven: the installed 1.0.0 in /Applications picked up 1.0.1 and
   installed it on quit (automatic updates were on, so the download was
@@ -100,15 +158,15 @@ Dan's stated requirements, all met as of this handoff:
 | `main.swift` | NSApplication bootstrap, sets `AppDelegate`. |
 | `AppDelegate.swift` | Installs the menu, applies saved appearance override, shows Open panel on launch/no windows, appearance & invert menu actions. Owns the Sparkle `SPUStandardUpdaterController` (started eagerly, so the scheduled background check runs). |
 | `MainMenu.swift` | Entire menu bar in code. Nil-target actions ride the responder chain (`zoomIn:`, `goToNextPage:` etc. are PDFView's). "Open Recent" is just a submenu with a `clearRecentDocuments:` item; AppKit fills it. "Check for Updates…" is the one item with an explicit target — Sparkle's updater controller isn't in the responder chain, so it's passed in from the app delegate. |
-| `FolioDocument.swift` | `NSDocument` (ObjC name `FolioDocument`, referenced from Info.plist) wrapping `PDFDocument`. Two `Kind`s: a PDF is opened directly; a Markdown file is decoded and converted to HTML in `read`, then typeset asynchronously and installed through `.folioDocumentDidReplacePDF`. Owns the `FileWatcher`, the re-render on a typography change, and `exportAsPDF`. `PDFDocumentDelegate`: returns `ReaderPage` for pages, forwards find callbacks to the window controller via `FindSink`. |
-| `MarkdownHTML.swift` | Markdown → HTML. Decode (UTF-8, UTF-16 by BOM), strip YAML front matter, `Markdown.Document` + `HTMLFormatter`, an `ImageInliner` rewriter that turns relative local images into `data:` URIs, and the print stylesheet. Pure Swift, no AppKit, safe off-main. |
-| `MarkdownRenderer.swift` | `@MainActor` singleton. One offscreen `WKWebView` in a never-shown borderless window; serial job queue (a newer job for the same document supersedes a queued one); prints to a temp PDF and hands back `(Data, PDFDocument)`. Tears the web view down 30 s after the last Markdown document closes. |
+| `FolioDocument.swift` | `NSDocument` (ObjC name `FolioDocument`, referenced from Info.plist) wrapping `PDFDocument`. Two `Kind`s: a PDF is opened directly; a Markdown file is decoded and converted to HTML in `read`, then typeset asynchronously and installed through `.folioDocumentDidReplacePDF`. Owns the `FileWatcher`, the re-render on a style/size/layout change, `applyOutline` (the synthesised Markdown table of contents), the word-count `markdownStats`, `isContinuousMarkdown`, and `exportAsPDF` (which typesets a second, paginated render when the reader is showing a continuous one). `PDFDocumentDelegate`: returns `ReaderPage` for pages, forwards find callbacks to the window controller via `FindSink`. |
+| `MarkdownHTML.swift` | Markdown → HTML. Decode (UTF-8, UTF-16 by BOM), strip YAML front matter, `Markdown.Document` + `HTMLFormatter`, an `ImageInliner` rewriter that turns relative local images into `data:` URIs, a `HeadingAnchorer` rewriter that wraps each heading in an invisible `folio-outline://` anchor and returns the heading list beside the HTML, a `TextCollector` walker behind the word count, and the stylesheet: a base layer of structure driven by CSS variables plus one style layer (six built-ins, or a custom file). Pure Swift, no AppKit, safe off-main. |
+| `MarkdownRenderer.swift` | `@MainActor` singleton. One offscreen `WKWebView` in a never-shown borderless window; serial job queue (a newer job for the same document supersedes a queued one); prints to a temp PDF and hands back `(Data, PDFDocument)`. A `.continuous` job is measured with `scrollHeight` after it loads and printed onto one page as tall as its content. Tears the web view down 30 s after the last Markdown document closes. |
 | `FileWatcher.swift` | vnode `DispatchSource` on the file *and* its parent directory, 250 ms debounce, `(inode, mtime, size)` gate, reopens the descriptor when the file is replaced or recreated. |
 | `ReaderWindowController.swift` | Window, `NSSplitViewController` (sidebar + reader), unified toolbar, page indicator, search field + hit counter + previous/next match segmented control (⇧⌘G/⌘G equivalents), tabs, reading-position memory, black chrome in dark mode. |
 | `ReaderViewController.swift` | `ReaderPDFView` (PDFView subclass: arrow-key paging, per-page highlight bookkeeping), appearance routine that installs the inversion filters. |
-| `SidebarViewController.swift` | `PDFThumbnailView`, mirrors the inversion filters. |
+| `SidebarViewController.swift` | Two panes behind a segmented control: `PDFThumbnailView` (mirrors the inversion filters) and an `NSOutlineView` table of contents driven from `PDFDocument.outlineRoot`, with `PDFOutline` objects as the items. Clicking a row navigates; `syncSelection()` follows the reading position. The outline is native text and is deliberately *not* filtered. |
 | `ReaderPage.swift` | `PDFPage` subclass; draws dark-mode find highlights. |
-| `Prefs.swift` | UserDefaults: invert toggle, appearance override, per-file last position. |
+| `Prefs.swift` | UserDefaults: invert toggle, appearance override, per-file last position, Markdown style/layout/size. Also `MarkdownStyle`, which enumerates the six built-ins and the `.css` files in `~/Library/Application Support/Folio/Styles` and reads a style's CSS. |
 
 Support/: `Info.plist`, `Folio.icon` (Icon Composer package, light+dark),
 `Assets.car` (compiled from it), `Folio.icns` (fallback). scripts/:
@@ -194,6 +252,39 @@ the alternatives that were considered into `Support/IconConcepts/` (gitignored,
   and table-header backgrounds are near-whites (`#FAFAFA`, `#F5F5F5`) that come
   out as dark grays. A `#F2F2F2`-class gray would invert to mid gray and look
   muddy. Link blue is `#0B57D0`, whose hue survives the 180° rotation.
+  **The page background is the exception: it must be pure `#FFFFFF`.**
+  `CIColorInvert` works in linear light, so the flip magnifies anything that is
+  not white — Antique's first draft used a `#FFFDF8` paper and the whole text
+  block came back as a brown slab on the black gutter. Panels (code, table
+  headers) *want* to be visible after the flip; the paper does not. `--paper`
+  is still a variable so a custom style can tint it, with that consequence.
+- **The stylesheet is two layers: base + style.** The base layer carries the
+  page structure, the list/checkbox/table/code mechanics, `a.fh`, the
+  keep-with-next hack, and a dozen CSS variables (`--body-font`,
+  `--heading-font`, `--mono-font`, `--body-size`, `--line-height`,
+  `--paragraph-gap`, `--text`, `--muted`, `--rule`, `--code-bg`,
+  `--code-border`, `--th-bg`, `--link`, `--paper`). A style layer follows it
+  and usually does nothing but set those variables: that is all six built-ins
+  are, and a `.css` file in `~/Library/Application Support/Folio/Styles` is
+  dropped in as that layer verbatim, so it can set the variables or override
+  any rule. Size stays a separate preference because it is the one thing a
+  reader changes without changing the look.
+- **Continuous layout is one very tall page through the same print path.**
+  Nothing else in the app has to learn a new mode: it is still a `PDFDocument`,
+  so find, the outline, position memory and the inversion filter work
+  unchanged, and `displayMode = .singlePageContinuous` with `autoScales` fits
+  it to the window's width exactly as it fits a Letter page. The renderer
+  measures `document.documentElement.scrollHeight` after the load (an
+  evaluation in `.defaultClient` runs even though content JavaScript is off)
+  and prints onto `612 × (height + 2)` with all four margins zero; in this mode
+  the stylesheet supplies the inch of white space as `body { padding: 72pt }`,
+  which is inside `scrollHeight`, and drops the keep-with-next and
+  `break-inside` rules because nothing breaks. Verified to 40,958 pt (64 Letter
+  pages) with no CoreGraphics or PDFKit complaint and no clipping.
+- **Export is always paginated.** A 40-inch page is a way to read on screen,
+  not a file to hand someone or print, so `exportAsPDF` typesets a second,
+  paginated render under its own renderer key (`<key>.export`, so the
+  document's own render is not superseded) and applies the same outline.
 - **Images are inlined as data URIs, everything else is blocked.** The page is
   loaded from a string, so relative image paths would not resolve anyway; the
   rewriter base64s local images under the document's own folder (8 MB cap) and
@@ -212,6 +303,24 @@ the alternatives that were considered into `Support/IconConcepts/` (gitignored,
   is no white flash) and fills through exactly the same `installDocument` path a
   file-change reload uses. Blocking `read` on a semaphore or a nested run loop
   was rejected: deadlock risk for no visible gain.
+- **The Markdown outline is synthesised from link annotations.** WebKit's print
+  path emits no PDF outline, but it does emit a link annotation for every
+  `<a href>`, so `MarkdownHTML`'s `HeadingAnchorer` rewriter wraps each
+  heading's content in `<a class="fh" href="folio-outline://<n>">` and records
+  `(level, plainText, n)` in the same pass, which is what keeps the numbering
+  and the list from drifting apart. After the render, `FolioDocument.applyOutline`
+  walks every page's annotations, keys them by the integer in the URL, keeps the
+  topmost hit per heading (a heading that wraps yields one annotation per line),
+  removes them all, and builds the `PDFOutline` tree with a level stack. An
+  annotation's URL names *one* heading exactly; fragment links (`#some-heading`)
+  would be ambiguous whenever two headings slugify the same, and WebKit does not
+  emit annotations for same-page fragments anyway. `a.fh { color: inherit }`
+  comes after the `a { color: #0B57D0 }` rule so the anchor is invisible.
+- **Export re-serialises Markdown.** `pdfDataForExport` hands back
+  `pdf.dataRepresentation()` rather than the raw print bytes, because those
+  still carry the `folio-outline://` links and none of the bookmarks; the
+  re-serialised file keeps the outline and drops the annotations. A `.pdf`
+  document is still exported byte-identical from the original file.
 - **swift-markdown is pinned by `revision:`.** Its manifest depends on
   swift-cmark by *branch*, and SwiftPM refuses a version range on top of that.
   `Package.resolved` records both.
@@ -235,7 +344,10 @@ dependency, currently 2.9.6).
   minutes. Without it `spctl` reports "Unnotarized Developer ID", which is
   expected on a plain build.
 
-**Three secrets, all on this Mac's login keychain and nowhere else:** the
+**Three secrets, held only in the login keychains of Dan's two Macs** (the
+desktop, and the M2 MacBook Pro since 2026-09-04 — Dan stored the notarization
+credentials there too; confirm the EdDSA key is present before assuming
+`release.sh` preflight passes on the MacBook): the
 Developer ID Application certificate + private key, the `notary` notarytool
 credential profile, and the Sparkle **EdDSA private key** (account `ed25519`,
 created by Sparkle's `generate_keys`). The matching public key is checked into
@@ -268,8 +380,9 @@ the appcast signature and the download URL prefix have to agree with the tag.
 
 ### Setting up the MacBook
 
-The other Mac (repo at `~/ClaudeCode/pdf`) can build and run Folio today;
-these steps are only for cutting *signed, notarized* releases there.
+The MacBook (repo at `~/ClaudeCode/pdf`) has had the signing and notarization
+credentials since 2026-09-04; these steps are kept for setting up any other
+machine, or for redoing step 5 if `release.sh` reports the EdDSA key missing.
 
 1. `git pull`; Xcode 26 / Swift 6.3 installed; `gh auth status` shows you
    logged in. **`./build.sh --adhoc` needs none of steps 2–5** — that's the
@@ -347,6 +460,19 @@ these steps are only for cutting *signed, notarized* releases there.
   and does nothing but hop to main.
 - **Never mutate `NSPrintInfo.shared`.** It is the user's Print… panel state;
   the renderer builds a fresh `NSPrintInfo(dictionary: [:])` every time.
+- **WebKit navigation callbacks need identity too**, for the same reason the
+  print operation does. Starting the next job's `loadHTMLString` cancels the
+  previous job's navigation, whose `didFailProvisionalNavigation` then arrives
+  and would fail the job that displaced it. `activeNavigation` holds the
+  `WKNavigation` we are waiting for and all three delegate callbacks compare
+  against it; the watchdog also tears the web view down before finishing, so a
+  stuck load is abandoned rather than inherited.
+- **A `deinit` that calls a `queue.sync` teardown can deadlock.** The last
+  reference to a `FileWatcher` can be released from inside one of its own queue
+  blocks (they take a temporary strong `self`), and `queue.sync` onto the serial
+  queue you are already running on hangs forever. `FileWatcher.deinit` cancels
+  the sources and the pending work item directly; nothing else can reach them by
+  then. `stop()` keeps the `sync` for the explicit call path.
 - **Set the `PDFDocumentDelegate` before anything touches a page.** PDFKit calls
   `classForPage` lazily, and a page vended before the delegate is in place is a
   plain `PDFPage` forever -- it can never draw dark-mode find highlights. In
@@ -359,6 +485,12 @@ these steps are only for cutting *signed, notarized* releases there.
   meaningless at that moment. `lastInstallTarget` is what the next install aims
   at while `restoreFinished` is false; without it, forty rapid appends walked
   the reader from page 4 to page 9.
+- **`pdfView.currentDestination.point.y` sits *above* the top of the page**, by
+  roughly the gutter's height, so comparing it raw against an outline
+  destination at the page top never matches and the sidebar highlighted the
+  previous chapter (or nothing at all on page 1). `syncSelection` clamps every y
+  it compares to `page.bounds(for: .cropBox).maxY`, which also tames the huge
+  "unspecified" coordinates real PDF destinations often carry.
 - **swift-markdown's `HTMLFormatter` wraps every list item's text in a `<p>`,**
   even in a tight list, so list spacing has to be taken off `li > p` and a task
   item's text pulled back beside its checkbox with
@@ -368,6 +500,25 @@ these steps are only for cutting *signed, notarized* releases there.
   stylesheet is the old keep-with-next hack: an invisible 72 pt `::after` on
   every heading, cancelled by an equal negative margin, so the heading box
   cannot fit in the last inch of a page and carries over with its content.
+- **WebKit lays a printed page out 25% wider than the paper and scales the
+  result down** (WebCore's minimum shrink factor). So a `scrollHeight` measured
+  in a 612 pt-wide web view is *not* the printed height: it wraps at the wrong
+  width and is in the wrong unit, and the first continuous page came out 22,251
+  pt tall for 13,740 pt of content — two-thirds of it blank. The renderer sets
+  the web view to `612 × 1.25` for a continuous job and divides the measurement
+  by the same factor; the result now lands within about 10 pt over 13,000. The
+  same factor is why a CSS `72pt` padding prints as ≈77 pt: CSS pt survive the
+  round trip multiplied by 4/3 × 0.8.
+- **`evaluateJavaScript(_:in:in: .defaultClient)` runs even with
+  `allowsContentJavaScript = false`** and a CSP of `default-src 'none'`. Those
+  stop the *page's* scripts; the app's own evaluation in the client world is
+  unaffected, which is what makes the continuous measurement possible.
+- **A page background never reaches the print margins.** `background` on
+  `body` (or on `html`) paints only the printable area, so in Pages mode a
+  tinted paper shows up as a slab inset by the one-inch margin rather than
+  covering the sheet. Combined with the linear-light inversion, that is why
+  `--paper` stays `#FFFFFF`. In Continuous mode the margins are zero and the
+  background does cover everything.
 - **Run the new build once (or `lsregister -f`) so LaunchServices learns the
   Markdown type.** `UTImportedTypeDeclarations` only takes effect after the
   bundle has been registered; `mdls -name kMDItemContentType foo.md` should then
@@ -396,8 +547,6 @@ these steps are only for cutting *signed, notarized* releases there.
 
 ## Known quirks / candidates for next work
 
-- Sidebar is thumbnails only; an outline (table of contents) pane would be
-  the obvious next sidebar mode (`PDFDocument.outlineRoot`).
 - No annotation/highlighting tools; no text-copy cleanup (line-break
   stripping); no per-document invert override (global toggle only).
 - Photos/figures render as luminance-inverted in dark mode; a per-image
@@ -412,3 +561,13 @@ these steps are only for cutting *signed, notarized* releases there.
   the *first* render reports an error and closes the document.
 - The renderer holds one WebContent process (60-120 MB) while any Markdown
   document is open and drops it ~30 s after the last one closes.
+- **Switching Pages ↔ Continuous lands near the top of the document**, because
+  the position is carried as a page index and a point and the two layouts share
+  neither. Anchoring to the nearest heading would fix this and the reload case
+  above at the same time.
+- **In Continuous mode the page indicator, Go ▸ page commands and arrow-key
+  paging all have nothing to act on** — there is one page. The indicator hides
+  itself; the rest simply do nothing.
+- A custom Markdown style is trusted: it is the style layer, so it can override
+  anything the base layer sets, including the geometry that makes continuous
+  layout measurable. Only the CSP still applies.

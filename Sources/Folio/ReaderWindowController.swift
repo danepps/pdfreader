@@ -11,8 +11,36 @@ extension NSToolbarItem.Identifier {
 /// Toolbar view for the page indicator: just a container that shows a
 /// pointing-hand cursor, so the number reads as clickable.
 private final class PageIndicatorContainer: NSView {
+    /// While the page field is being edited the capsule gets an accent ring:
+    /// the tinted field alone reads as "the number got selected" in dark mode,
+    /// not as a box you are typing in.
+    var isEditing = false {
+        didSet { applyEditingBorder() }
+    }
+
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        applyEditingBorder()
+    }
+
+    func applyEditingBorder() {
+        wantsLayer = true
+        guard let layer else { return }
+        layer.cornerRadius = 6   // matches the toolbar item's capsule
+        layer.borderWidth = isEditing ? 1.5 : 0
+        guard isEditing else {
+            layer.borderColor = nil
+            return
+        }
+        // A CGColor is resolved once and does not follow the appearance, so
+        // pin it to ours every time the ring goes up.
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer.borderColor = NSColor.controlAccentColor.cgColor
+        }
     }
 }
 
@@ -20,7 +48,8 @@ private final class PageIndicatorContainer: NSView {
 /// a page indicator and a search field, incremental find, and reading-position
 /// memory.
 final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate,
-                                    NSSearchFieldDelegate, NSTextFieldDelegate, FindSink {
+                                    NSSearchFieldDelegate, NSTextFieldDelegate,
+                                    NSMenuItemValidation, FindSink {
 
     private let folioDocument: FolioDocument
     private let readerVC: ReaderViewController
@@ -31,6 +60,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private let pageLabel = NSTextField(labelWithString: "")
     private let pageField = NSTextField()
+    private weak var pageIndicator: PageIndicatorContainer?
     private weak var searchItem: NSSearchToolbarItem?
     private let searchCountLabel = NSTextField(labelWithString: "")
 
@@ -107,7 +137,14 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         sizeWindowInitially(window)
         buildToolbar()
         configurePageControls()
+        applyWindowOpacity()
 
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(prefsChanged),
+            name: .folioPrefsChanged,
+            object: nil
+        )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(pageChanged),
@@ -134,6 +171,15 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         sidebarVC.setContentFilters(inverted ? ReaderViewController.makeInvertFilters() : [])
         applyHighlights()
         applyWindowChrome()
+    }
+
+    @objc private func prefsChanged() {
+        applyWindowOpacity()
+    }
+
+    /// Tabs are separate windows, so every controller tints its own.
+    private func applyWindowOpacity() {
+        window?.alphaValue = Prefs.windowOpacity
     }
 
     /// In dark mode the title bar and tab bar sit on plain black, matching the
@@ -221,7 +267,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     private func buildContent() {
         let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarVC)
         sidebarItem.minimumThickness = 150
-        sidebarItem.maximumThickness = 280
+        sidebarItem.maximumThickness = 360
         sidebarItem.canCollapse = true
         sidebarItem.isCollapsed = true
         sidebarItem.allowsFullHeightLayout = true
@@ -282,6 +328,9 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         pageField.layer?.cornerRadius = 4
         pageField.layer?.masksToBounds = true
         pageField.isHidden = true
+        // Editing is only ever entered deliberately (a click or ⌥⌘G); this
+        // keeps the key-view loop from handing it focus on its own.
+        pageField.refusesFirstResponder = true
         pageField.translatesAutoresizingMaskIntoConstraints = false
 
         updatePageField()
@@ -292,6 +341,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         container.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(pageLabel)
         container.addSubview(pageField)
+        pageIndicator = container
 
         // Fixed width, sized for the widest string this document can show, so
         // the capsule never resizes while paging; the label centres inside it.
@@ -355,8 +405,12 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     @objc func beginPageEdit() {
         guard pageCount > 0, pageField.isHidden else { return }
         pageField.stringValue = currentPageNumber.map(String.init) ?? ""
+        // Emptying the field should still say what a legal answer looks like.
+        pageField.placeholderString = "1\u{2013}\(pageCount)"
         pageLabel.isHidden = true
         pageField.isHidden = false
+        pageField.refusesFirstResponder = false
+        pageIndicator?.isEditing = true
         window?.makeFirstResponder(pageField)
         pageField.currentEditor()?.selectAll(nil)
     }
@@ -366,6 +420,8 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         guard !pageField.isHidden else { return }
         pageField.isHidden = true
         pageField.drawsBackground = false
+        pageField.refusesFirstResponder = true
+        pageIndicator?.isEditing = false
         pageLabel.isHidden = false
         updatePageField()
     }
@@ -388,12 +444,14 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     @objc private func pageChanged() {
         updatePageField()
         savePosition()
+        sidebarVC.syncSelection()
     }
 
     func controlTextDidBeginEditing(_ obj: Notification) {
         guard (obj.object as? NSTextField) === pageField else { return }
         pageField.drawsBackground = true
-        pageField.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12)
+        pageField.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18)
+        pageIndicator?.applyEditingBorder()
         pageField.currentEditor()?.selectAll(nil)
     }
 
@@ -744,7 +802,38 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         super.showWindow(sender)
         window?.makeFirstResponder(pdfView)
+        // A plain PDF is never installed through documentDidReplacePDF, so this
+        // is the one chance to read its outline; a Markdown document has no PDF
+        // yet and picks its mode up when the first render lands.
+        if pdfView.document != nil { sidebarVC.documentDidChange() }
         restorePositionIfNeeded()
+    }
+
+    // MARK: Sidebar mode
+
+    @objc func showThumbnails(_ sender: Any?) { setSidebarMode(.thumbnails) }
+
+    @objc func showOutline(_ sender: Any?) { setSidebarMode(.outline) }
+
+    private func setSidebarMode(_ mode: SidebarMode) {
+        Prefs.sidebarMode = mode
+        sidebarVC.mode = mode
+        if sidebarItem?.isCollapsed == true {
+            sidebarItem?.animator().isCollapsed = false
+        }
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        switch menuItem.action {
+        case #selector(showThumbnails(_:)):
+            menuItem.state = sidebarVC.mode == .thumbnails ? .on : .off
+        case #selector(showOutline(_:)):
+            menuItem.state = sidebarVC.mode == .outline ? .on : .off
+            return sidebarVC.hasOutline
+        default:
+            break
+        }
+        return true
     }
 
     /// Opening a new tab means opening another document, which also makes
@@ -837,6 +926,9 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     @objc private func documentDidReplacePDF(_ note: Notification) {
         guard let replacement = folioDocument.pdf else { return }
         let initial = (note.userInfo?["initial"] as? Bool) ?? false
+        if let stats = folioDocument.markdownStats {
+            window?.subtitle = "\(stats.words.formatted(.number)) words · \(stats.minutes) min"
+        }
         // On a reload, hold the place the reader is actually looking at; on the
         // first render there is nothing on screen yet, so use the saved one.
         var target = initial ? savedPosition : lastInstallTarget
@@ -880,6 +972,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         pdfView.document = replacement
         sidebarVC.documentDidChange()
+        setPageIndicatorVisible(!folioDocument.isContinuousMarkdown)
         pageIndicatorWidth?.constant = indicatorWidth(for: replacement.pageCount)
         updatePageField()
 
@@ -898,10 +991,37 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
     }
 
+    /// Where the page indicator was before it was taken out of the toolbar.
+    private var pageIndicatorSlot: Int?
+
+    /// A continuously laid-out Markdown document is one very tall page, so
+    /// "1 of 1" says nothing; the item leaves the toolbar entirely and comes
+    /// back, at its own place, when the document is paginated again.
+    private func setPageIndicatorVisible(_ visible: Bool) {
+        guard let toolbar = window?.toolbar else { return }
+        if let index = toolbar.items.firstIndex(where: { $0.itemIdentifier == .pageIndicator }) {
+            guard !visible else { return }
+            pageIndicatorSlot = index
+            toolbar.removeItem(at: index)
+        } else if visible {
+            let slot = pageIndicatorSlot
+                ?? toolbarDefaultItemIdentifiers(toolbar).firstIndex(of: .pageIndicator)
+                ?? toolbar.items.count
+            toolbar.insertItem(withItemIdentifier: .pageIndicator,
+                               at: min(slot, toolbar.items.count))
+        }
+    }
+
     private func finishInstall() {
         restoreStarted = true
         restoreFinished = true
         updatePageField()
+        // Swapping the document can leave the window itself as first responder,
+        // and the next activation then hands focus to the first key view it
+        // finds -- which is in the toolbar, not the page.
+        if let window, window.firstResponder === window || window.firstResponder == nil {
+            window.makeFirstResponder(pdfView)
+        }
         // Re-run the search against the new document, without letting match 1
         // pull the view away from where the reader was.
         if !lastQuery.isEmpty { startFind(lastQuery, suppressFirstScroll: true) }
