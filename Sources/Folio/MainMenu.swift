@@ -162,6 +162,8 @@ enum MainMenu {
         let opacity = NSMenuItem(title: "Window Opacity", action: nil, keyEquivalent: "")
         opacity.view = OpacityMenuItemView()
         menu.addItem(opacity)
+        add(menu, "Blur Behind Window", #selector(AppDelegate.toggleWindowBlur(_:)),
+            target: appDelegate)
         add(menu, "Increase Opacity", #selector(AppDelegate.increaseOpacity(_:)),
             key: upArrowKey, modifiers: [.command, .option], target: appDelegate)
         add(menu, "Decrease Opacity", #selector(AppDelegate.decreaseOpacity(_:)),

@@ -8,9 +8,10 @@ Markdown into pages. Built because PDF Expert got slow.
   mode the PDF content itself renders light-on-dark, not just the window chrome.
   Toggle with View ▸ Invert Page Colors in Dark Mode, or force Light/Dark under
   View ▸ Appearance.
-- **Adjustable window opacity.** View ▸ Window Opacity fades the whole window
-  from 100% down to 30% so you can read against what is behind it; ⌥⌘↑ / ⌥⌘↓
-  step it.
+- **Adjustable window opacity, with a blurred backdrop.** View ▸ Window Opacity
+  fades the page from 100% down to 30% so you can read against what is behind
+  it, and blurs whatever shows through the way Terminal does; ⌥⌘↑ / ⌥⌘↓ step it,
+  and View ▸ Blur Behind Window turns the blur off for a sharp backdrop.
 - **Opens Markdown too.** A `.md` file is typeset into real pages and shown
   through the same reader, so tabs, dark mode, find, paging, and position memory
   all work on it. It re-renders within about half a second whenever the file
@@ -132,6 +133,8 @@ outline, and position memory need to know nothing about it.
 appearances, compiled by `scripts/make-icon.sh` into `Support/Assets.car`
 (macOS 26 uses it via `CFBundleIconName`). The same script renders
 `Support/Folio.icns` as the fallback for macOS 14 and 15.
+`swift scripts/make-doc-icon.swift` builds `Support/MarkdownDocument.icns`,
+the Finder document icon for `.md` files.
 
 ## License
 

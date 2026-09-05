@@ -33,6 +33,9 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 if [[ -f "$ROOT/Support/Folio.icns" ]]; then
   cp "$ROOT/Support/Folio.icns" "$APP/Contents/Resources/Folio.icns"
 fi
+if [[ -f "$ROOT/Support/MarkdownDocument.icns" ]]; then
+  cp "$ROOT/Support/MarkdownDocument.icns" "$APP/Contents/Resources/MarkdownDocument.icns"
+fi
 if [[ -f "$ROOT/Support/Assets.car" ]]; then
   cp "$ROOT/Support/Assets.car" "$APP/Contents/Resources/Assets.car"
 fi

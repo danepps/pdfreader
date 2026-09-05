@@ -58,9 +58,17 @@ Dan's stated requirements, all met as of this handoff:
   following the reading position, the outline refreshing on a file change, and
   an exported Markdown PDF carrying the bookmarks with no `folio-outline` links
   left. Dark mode checked by screenshot.
-- Window opacity landed 2026-09-04: `Prefs.windowOpacity` (0.3–1.0, default 1)
-  drives `window.alphaValue` on every reader window, applied at init and on
-  `.folioPrefsChanged` so tabs (separate windows) follow. View ▸ Window Opacity
+- Window opacity landed 2026-09-04, and blur behind it the same day:
+  `Prefs.windowOpacity` (0.3–1.0, default 1) below 1 makes the window
+  non-opaque with a clear background, fades the *content* view instead of the
+  window, and blurs the desktop showing through
+  (`CGSSetWindowBackgroundBlurRadius`, radius 24); `Prefs.windowBlur` (default
+  true) turns just the blur off, as View ▸ Blur Behind Window, which is checked
+  and disabled at 100%. At exactly 1 the window goes back to opaque with the
+  chrome's own background and content alpha 1. All of it is one
+  `applyWindowAppearance` — chrome and translucency share the window background
+  colour — applied at init, from `showWindow`, and on `.folioPrefsChanged` so
+  tabs (separate windows) follow. View ▸ Window Opacity
   is a menu item with a custom view (`OpacityMenuItemView` in `MainMenu.swift`:
   caption, 150 pt continuous slider, live monospaced-digit percentage), plus
   Increase/Decrease Opacity at ⌥⌘↑ / ⌥⌘↓, which step by 0.1 and disable at the
@@ -72,7 +80,12 @@ Dan's stated requirements, all met as of this handoff:
   the ⌥⌘↑/⌥⌘↓ steps, and both tabs of a two-tab window going translucent
   together. The menu bar follows the *system* appearance, not the app's, so the
   dark-menu look could not be forced from `Prefs.appearance`; the row uses
-  `.labelColor` throughout and was checked in a light menu.
+  `.labelColor` throughout and was checked in a light menu. Blur runtime-verified
+  against a Finder window in icon view behind the reader: blurred at 60% in
+  forced dark and forced light, sharp with the item unchecked, blurred again on
+  re-check, a second tab translucent and blurred too, find highlights and the hit
+  count readable through it, and no residual blur or visible difference from the
+  old build back at 100%.
 - Page-field editing feedback landed 2026-09-04: `PageIndicatorContainer` gets a
   1.5 pt `controlAccentColor` ring (cornerRadius 6) while the field is being
   edited, the field's accent wash went 0.12 → 0.18, and the placeholder reads
@@ -131,7 +144,8 @@ Dan's stated requirements, all met as of this handoff:
 ./build.sh --run           # release build + launch (run from repo root)
 ./build.sh --debug         # debug config
 ./build.sh --adhoc         # skip Developer ID signing (offline, no keychain)
-./scripts/make-icon.sh     # regenerate icon assets
+./scripts/make-icon.sh     # regenerate app icon assets
+swift scripts/make-doc-icon.swift   # regenerate the Markdown document icon
 ./release.sh 1.0.1         # cut a release (see "Signing, notarization, updates")
 ```
 
@@ -162,11 +176,11 @@ Dan's stated requirements, all met as of this handoff:
 | `MarkdownHTML.swift` | Markdown → HTML. Decode (UTF-8, UTF-16 by BOM), strip YAML front matter, `Markdown.Document` + `HTMLFormatter`, an `ImageInliner` rewriter that turns relative local images into `data:` URIs, a `HeadingAnchorer` rewriter that wraps each heading in an invisible `folio-outline://` anchor and returns the heading list beside the HTML, a `TextCollector` walker behind the word count, and the stylesheet: a base layer of structure driven by CSS variables plus one style layer (six built-ins, or a custom file). Pure Swift, no AppKit, safe off-main. |
 | `MarkdownRenderer.swift` | `@MainActor` singleton. One offscreen `WKWebView` in a never-shown borderless window; serial job queue (a newer job for the same document supersedes a queued one); prints to a temp PDF and hands back `(Data, PDFDocument)`. A `.continuous` job is measured with `scrollHeight` after it loads and printed onto one page as tall as its content. Tears the web view down 30 s after the last Markdown document closes. |
 | `FileWatcher.swift` | vnode `DispatchSource` on the file *and* its parent directory, 250 ms debounce, `(inode, mtime, size)` gate, reopens the descriptor when the file is replaced or recreated. |
-| `ReaderWindowController.swift` | Window, `NSSplitViewController` (sidebar + reader), unified toolbar, page indicator, search field + hit counter + previous/next match segmented control (⇧⌘G/⌘G equivalents), tabs, reading-position memory, black chrome in dark mode. |
+| `ReaderWindowController.swift` | Window, `NSSplitViewController` (sidebar + reader), unified toolbar, page indicator, search field + hit counter + previous/next match segmented control (⇧⌘G/⌘G equivalents), tabs, reading-position memory, black chrome in dark mode, window translucency and the backdrop blur. |
 | `ReaderViewController.swift` | `ReaderPDFView` (PDFView subclass: arrow-key paging, per-page highlight bookkeeping), appearance routine that installs the inversion filters. |
 | `SidebarViewController.swift` | Two panes behind a segmented control: `PDFThumbnailView` (mirrors the inversion filters) and an `NSOutlineView` table of contents driven from `PDFDocument.outlineRoot`, with `PDFOutline` objects as the items. Clicking a row navigates; `syncSelection()` follows the reading position. The outline is native text and is deliberately *not* filtered. |
 | `ReaderPage.swift` | `PDFPage` subclass; draws dark-mode find highlights. |
-| `Prefs.swift` | UserDefaults: invert toggle, appearance override, per-file last position, Markdown style/layout/size. Also `MarkdownStyle`, which enumerates the six built-ins and the `.css` files in `~/Library/Application Support/Folio/Styles` and reads a style's CSS. |
+| `Prefs.swift` | UserDefaults: invert toggle, appearance override, per-file last position, Markdown style/layout/size, window opacity and blur. Also `MarkdownStyle`, which enumerates the six built-ins and the `.css` files in `~/Library/Application Support/Folio/Styles` and reads a style's CSS. |
 
 Support/: `Info.plist`, `Folio.icon` (Icon Composer package, light+dark),
 `Assets.car` (compiled from it), `Folio.icns` (fallback). scripts/:
@@ -176,6 +190,34 @@ a folded corner and four coloured margin tabs on a graphite tile; the dark
 variant flips the page to black. `scripts/make-icon-concepts.swift` renders
 the alternatives that were considered into `Support/IconConcepts/` (gitignored,
 ~57 MB).
+
+The **Markdown document icon** (the Finder icon for a `.md` file) is separate:
+`swift scripts/make-doc-icon.swift` writes the committed
+`Support/MarkdownDocument.icns` (10 entries, 16–512 pt at 1× and 2×), which
+`build.sh` copies into `Contents/Resources` and `Info.plist` names twice —
+`CFBundleTypeIconFile` on the Markdown `CFBundleDocumentTypes` entry and
+`UTTypeIconFile` on the imported UTI. It is a bare sheet with the app icon's
+folded corner, slate rules and four coloured margin tabs, plus a bold M↓;
+only the *light* variant is shipped, because Finder draws one document icon
+whatever the appearance is. `scripts/make-doc-icon-concepts.swift` stays as the
+exploratory script (six directions into `Support/IconConcepts/Doc/`). Each size
+is drawn at its own resolution rather than downsampled, and 16 and 32 px are
+hand-tuned in `tuning(for:)`: the sheet is zoomed to fill the tile, edges and
+rules snap to whole pixels, the mark's stem is forced to 2 px (the
+proportional 0.25 × height lands under a pixel and greys out), tab positions
+come from one rounded pitch rather than four rounded positions, and at 16 px
+the rules and the arrow are dropped — there is only room for the M.
+
+Two gotchas. **LaunchServices caches document icons**, so a rebuild changes
+nothing until the bundle is re-registered
+(`…/LaunchServices.framework/Support/lsregister -f build/Folio.app`) and Finder
+is restarted (`killall Finder`); and the icon is taken from whichever bundle
+LaunchServices resolves as the *handler* for `net.daringfireball.markdown`,
+which with a copy in `/Applications` is the installed app, not `build/`.
+**Finder icon view shows a QuickLook text preview for `.md`, not the document
+icon** (icon previews are on by default), so the icon shows up in list and
+column view, Open/Save panels and the Dock — which is why the 16 and 32 px
+tiles are the ones worth tuning.
 
 ## Design decisions and why
 
@@ -200,6 +242,21 @@ the alternatives that were considered into `Support/IconConcepts/` (gitignored,
   toolbar. In dark mode the window also gets `titlebarAppearsTransparent`,
   `backgroundColor = .black`, `titlebarSeparatorStyle = .none` to make the
   chrome solid black.
+- **Translucency is content alpha plus a backdrop blur, not `alphaValue`.**
+  `window.alphaValue` fades the window *and* leaves everything behind it
+  perfectly sharp, which is not what Terminal-style translucency looks like. So
+  below 100% the window goes `isOpaque = false` with a clear background and the
+  alpha lands on `contentViewController.view` instead; the window's own pixels
+  are then transparent, which is the precondition for blurring behind it. The
+  blur is the same CoreGraphics SPI Terminal and iTerm use,
+  `CGSSetWindowBackgroundBlurRadius(CGSMainConnectionID(), windowNumber, 24)`,
+  with both symbols resolved through `dlsym(RTLD_DEFAULT, …)` at first use, so a
+  macOS that withdraws them costs the blur and not the app. It works on macOS
+  26, including for tabbed windows. The public fallback (an
+  `NSVisualEffectView` with `blendingMode = .behindWindow` as the window's
+  bottom-most view) was therefore never needed, and would have meant
+  re-parenting the split view controller's view — which is what gives the
+  sidebar its full-height layout — so it stayed unwritten.
 - **`pageShadowsEnabled = false` when inverted.** Inverted drop shadows
   showed as bright halos and a light band at the bottom of the view.
 - **Find highlights in dark mode are custom-drawn** in `ReaderPage.draw`: a
@@ -423,11 +480,29 @@ Steps 1–4 are kept for setting up any further machine.
 
 ## Gotchas learned the hard way
 
+- **A locked screen breaks notarization, and only notarization.** `notarytool`
+  keeps its `notary` profile in the data-protection keychain, which locks with
+  the screen; the Developer ID identity and the Sparkle key live in the login
+  keychain and stay readable. So a release driven remotely (Remote Control,
+  SSH) on a Mac sitting at the lock screen fails preflight with "notarytool
+  profile 'notary' missing or invalid" even though nothing is missing, and
+  `store-credentials` fails the same way. Check
+  `CGSSessionScreenIsLocked` in `ioreg -n Root -d1`/`python -c` before
+  concluding the credential is gone; unlock via Screen Sharing and rerun.
+  (2026-09-04, Mac Studio.) The same lock also blanks `screencapture`, which is
+  why agent-driven UI verification stalls until someone unlocks.
 - **Never add Swift stored properties to a `PDFPage` subclass.** PDFKit
   allocates pages through a private initializer that skips Swift ivar
   setup; the property reads as garbage on the tile thread and crashes
   (`EXC_BAD_ACCESS` in `draw`). `ReaderPage` keeps state in an ObjC
   associated object holding an immutable box.
+- **The backdrop blur is addressed by `windowNumber`, not by the NSWindow.** A
+  window that has never been ordered in has none, and a reader window joins its
+  tab group inside `showWindow`, so `applyWindowAppearance` runs again there
+  rather than only at init. The blur also has to be cleared explicitly (radius
+  0) when opacity returns to 1: nothing about an opaque window undoes it.
+  Alpha on the content view wants `wantsLayer` too, or AppKit has nothing to
+  composite through.
 - `annotationsChanged(on:)` alone does not drop an already-rendered tile;
   follow it with `layoutDocumentView()` + `needsDisplay`.
 - `.PDFViewPageChanged` fires during initial layout reporting page 1, which
