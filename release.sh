@@ -3,8 +3,13 @@
 # Sparkle appcast, commit, tag, push, and publish a GitHub release.
 #
 # Usage: ./release.sh <version> [release notes]
+#        ./release.sh --check
 #   ./release.sh 1.0.1
 #   ./release.sh 1.0.1 "Fixes the sidebar collapsing when a tab is added."
+#   ./release.sh --check      # preflight only: never builds, tags, or publishes
+#
+# There is no other dry run. Any real-looking version goes all the way to a
+# public release once the secrets are present (9.9.9 did, once).
 #
 # Needs, all on this Mac's login keychain: the Developer ID Application
 # certificate, the "notary" notarytool profile, and the Sparkle EdDSA private
@@ -14,9 +19,13 @@ set -euo pipefail
 ROOT="${0:A:h}"
 REPO="danepps/pdfreader"
 
+CHECK_ONLY=0
 VERSION="${1:-}"
-if [[ -z "$VERSION" ]]; then
-  echo "usage: ${0:t} <version> [release notes]" >&2
+if [[ "$VERSION" == --check ]]; then
+  CHECK_ONLY=1
+  VERSION=0.0.1   # placeholder that passes the format check; never used
+elif [[ -z "$VERSION" ]]; then
+  echo "usage: ${0:t} <version> [release notes]   or   ${0:t} --check" >&2
   exit 1
 fi
 if [[ ! "$VERSION" =~ '^[0-9]+(\.[0-9]+)+$' ]]; then
@@ -47,17 +56,19 @@ if [[ "$(git -C "$ROOT" rev-parse HEAD)" != "$(git -C "$ROOT" rev-parse origin/m
   exit 1
 fi
 
-if git -C "$ROOT" rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null \
-   || git -C "$ROOT" ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
-  echo "tag v$VERSION already exists" >&2
-  exit 1
-fi
+if (( ! CHECK_ONLY )); then
+  if git -C "$ROOT" rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null \
+     || git -C "$ROOT" ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
+    echo "tag v$VERSION already exists" >&2
+    exit 1
+  fi
 
-CURRENT="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ROOT/Support/Info.plist")"
-if [[ "$(printf '%s\n%s\n' "$CURRENT" "$VERSION" | sort -V | tail -1)" != "$VERSION" \
-   || "$CURRENT" == "$VERSION" ]]; then
-  echo "version $VERSION is not newer than the current $CURRENT" >&2
-  exit 1
+  CURRENT="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ROOT/Support/Info.plist")"
+  if [[ "$(printf '%s\n%s\n' "$CURRENT" "$VERSION" | sort -V | tail -1)" != "$VERSION" \
+     || "$CURRENT" == "$VERSION" ]]; then
+    echo "version $VERSION is not newer than the current $CURRENT" >&2
+    exit 1
+  fi
 fi
 
 if ! gh auth status >/dev/null 2>&1; then
@@ -84,6 +95,11 @@ GENERATE_APPCAST=( "$ROOT"/.build/artifacts/*/Sparkle/bin/generate_appcast(N) )
 if (( ${#GENERATE_APPCAST} == 0 )); then
   echo "generate_appcast not found; run ./build.sh once to resolve Sparkle" >&2
   exit 1
+fi
+
+if (( CHECK_ONLY )); then
+  echo "preflight OK: on main, clean, in sync with origin, cert + notary profile + Sparkle key present"
+  exit 0
 fi
 
 # --- Version -------------------------------------------------------------

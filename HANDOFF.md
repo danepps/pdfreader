@@ -401,9 +401,9 @@ dependency, currently 2.9.6).
   minutes. Without it `spctl` reports "Unnotarized Developer ID", which is
   expected on a plain build.
 
-**Three secrets, held only in login keychains** (all three on the desktop; the
-M2 MacBook Pro has the first two since 2026-09-04 and still needs the EdDSA key
-— see "Signing on both Macs"): the
+**Three secrets, held only in the login keychains of both Macs** (the Studio
+throughout; the M2 MacBook Pro since 2026-09-05, when the EdDSA key was
+imported — see "Signing on both Macs"): the
 Developer ID Application certificate + private key, the `notary` notarytool
 credential profile, and the Sparkle **EdDSA private key** (account `ed25519`,
 created by Sparkle's `generate_keys`). The matching public key is checked into
@@ -480,6 +480,12 @@ Steps 1–4 are kept for setting up any further machine.
 
 ## Gotchas learned the hard way
 
+- **`release.sh <fake version>` is not a dry run.** With all three secrets
+  present it publishes: on 2026-09-05 a "preflight test" with 9.9.9 produced a
+  real tag, GitHub release, appcast entry and release commit, which then had
+  to be deleted, reverted and pushed within minutes (no installed copy had
+  checked the feed in between). Use `./release.sh --check`, which stops after
+  preflight and exits 0, for that purpose; it exists because of this.
 - **Toolbars that share an identifier are one toolbar.** AppKit synchronises
   every `NSToolbar` created with the same identifier: `removeItem(at:)` on one
   window removed the page indicator from every reader window, and every window
