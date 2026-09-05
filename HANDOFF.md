@@ -344,10 +344,9 @@ dependency, currently 2.9.6).
   minutes. Without it `spctl` reports "Unnotarized Developer ID", which is
   expected on a plain build.
 
-**Three secrets, held only in the login keychains of Dan's two Macs** (the
-desktop, and the M2 MacBook Pro since 2026-09-04 — Dan stored the notarization
-credentials there too; confirm the EdDSA key is present before assuming
-`release.sh` preflight passes on the MacBook): the
+**Three secrets, held only in login keychains** (all three on the desktop; the
+M2 MacBook Pro has the first two since 2026-09-04 and still needs the EdDSA key
+— see "Signing on both Macs"): the
 Developer ID Application certificate + private key, the `notary` notarytool
 credential profile, and the Sparkle **EdDSA private key** (account `ed25519`,
 created by Sparkle's `generate_keys`). The matching public key is checked into
@@ -378,11 +377,17 @@ publish step (delete the tag locally and remotely, delete the GitHub release
 if it exists, `reset --hard origin/main`, rerun). Don't hand-run the pieces;
 the appcast signature and the download URL prefix have to agree with the tag.
 
-### Setting up the MacBook
+### Signing on both Macs
 
-The MacBook (repo at `~/ClaudeCode/pdf`) has had the signing and notarization
-credentials since 2026-09-04; these steps are kept for setting up any other
-machine, or for redoing step 5 if `release.sh` reports the EdDSA key missing.
+Status 2026-09-04: the MacBook (repo at `~/ClaudeCode/pdf`) has the Developer
+ID certificate and the `notary` profile and notarizes fine, but **not** the
+Sparkle EdDSA key, so `release.sh` stops in preflight there. A release attempt
+that day ran all the way through notarization before `generate_appcast` found
+the key missing; preflight now checks for it first. To finish the setup, do
+step 5 below the next time both machines are at hand. The key cannot be
+regenerated (see above), and iCloud Keychain does not sync it — it is a plain
+login-keychain item — so it has to be exported and imported by hand, once.
+Steps 1–4 are kept for setting up any further machine.
 
 1. `git pull`; Xcode 26 / Swift 6.3 installed; `gh auth status` shows you
    logged in. **`./build.sh --adhoc` needs none of steps 2–5** — that's the

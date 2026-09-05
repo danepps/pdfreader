@@ -72,6 +72,13 @@ if ! xcrun notarytool history --keychain-profile notary >/dev/null 2>&1; then
   echo "notarytool profile 'notary' missing or invalid" >&2
   exit 1
 fi
+# Checked here rather than discovered by generate_appcast after a notarization
+# round trip. Never fix this with bare generate_keys; import the existing key
+# (HANDOFF.md, "Signing on both Macs").
+if ! security find-generic-password -a ed25519 >/dev/null 2>&1; then
+  echo "Sparkle EdDSA private key (keychain account 'ed25519') not on this Mac" >&2
+  exit 1
+fi
 
 GENERATE_APPCAST=( "$ROOT"/.build/artifacts/*/Sparkle/bin/generate_appcast(N) )
 if (( ${#GENERATE_APPCAST} == 0 )); then
