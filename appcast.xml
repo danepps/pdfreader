@@ -9,16 +9,6 @@
         <description>Most recent updates to Folio.</description>
         <language>en</language>
         <item>
-            <title>9.9.9</title>
-            <pubDate>Sat, 05 Sep 2026 09:51:41 -0500</pubDate>
-            <link>https://github.com/danepps/pdfreader</link>
-            <sparkle:version>5</sparkle:version>
-            <sparkle:shortVersionString>9.9.9</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/danepps/pdfreader/releases/download/v9.9.9/Folio-9.9.9.zip" length="4035626" type="application/octet-stream" sparkle:edSignature="fFds408DJZqBuFGtmqt/wPX0lwFX5ucK9eSRnGYWMxRYYios2Wac0csbcyt+LPAo+V7J2P4wEe3sIyL8Uw7tCg=="/>
-        </item>
-        <item>
             <title>1.1.0</title>
             <pubDate>Sat, 05 Sep 2026 09:46:31 -0500</pubDate>
             <link>https://github.com/danepps/pdfreader</link>
@@ -37,6 +27,16 @@
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
             <enclosure url="https://github.com/danepps/pdfreader/releases/download/v1.0.1/Folio-1.0.1.zip" length="3404745" type="application/octet-stream" sparkle:edSignature="H8h7vzaYyxQHkB8lDRnqRkLJaNUYXjr2lCfYvKPNhriLIyHdTpQ+f/hj1yCAKEi8yKFe4GuWQPSQsUO1GVEfDA=="/>
+        </item>
+        <item>
+            <title>1.0.0</title>
+            <pubDate>Fri, 04 Sep 2026 09:20:04 -0500</pubDate>
+            <link>https://github.com/danepps/pdfreader</link>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/danepps/pdfreader/releases/download/v1.0.0/Folio-1.0.0.zip" length="2777340" type="application/octet-stream" sparkle:edSignature="8pdubd8rNusNqFhodtFy7xY/DE2j17pUUh5U8M7nV+rNoGjvU/C6P4/0PIXTTxQlo6DvnOwMupngs/+7BnusCA=="/>
         </item>
     </channel>
 </rss>
