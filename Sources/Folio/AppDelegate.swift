@@ -56,6 +56,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         Prefs.windowOpacity -= Prefs.windowOpacityStep
     }
 
+    @objc func toggleWindowBlur(_ sender: NSMenuItem) {
+        Prefs.windowBlur.toggle()
+    }
+
     @objc func setMarkdownStyle(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
         Prefs.markdownStyle = id
@@ -123,6 +127,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             menuItem.state = (menuItem.tag == Prefs.appearance.rawValue) ? .on : .off
         case #selector(toggleInvertInDarkMode(_:)):
             menuItem.state = Prefs.invertInDarkMode ? .on : .off
+        case #selector(toggleWindowBlur(_:)):
+            menuItem.state = Prefs.windowBlur ? .on : .off
+            // Nothing to blur behind an opaque window.
+            return Prefs.windowOpacity < Prefs.maxWindowOpacity
         case #selector(increaseOpacity(_:)):
             return Prefs.windowOpacity < Prefs.maxWindowOpacity
         case #selector(decreaseOpacity(_:)):

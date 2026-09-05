@@ -44,6 +44,31 @@ private final class PageIndicatorContainer: NSView {
     }
 }
 
+/// The private CoreGraphics call Terminal and iTerm use to blur the desktop
+/// behind a transparent window; there is no public equivalent for a window
+/// whose content is a PDFView. Both symbols are resolved through RTLD_DEFAULT
+/// at first use, so a macOS that withdraws them costs the blur, not the app.
+private enum BackdropBlur {
+    private typealias MainConnectionID = @convention(c) () -> Int32
+    private typealias SetBlurRadius = @convention(c) (Int32, Int32, Int32) -> Int32
+
+    /// Radius that reads as a blur without smearing the desktop into a wash.
+    static let radius: Int32 = 24
+
+    static let apply: ((NSWindow, Int32) -> Void)? = {
+        let processHandle = UnsafeMutableRawPointer(bitPattern: -2)   // RTLD_DEFAULT
+        guard let connectionSymbol = dlsym(processHandle, "CGSMainConnectionID"),
+              let blurSymbol = dlsym(processHandle, "CGSSetWindowBackgroundBlurRadius")
+        else { return nil }
+        let connectionID = unsafeBitCast(connectionSymbol, to: MainConnectionID.self)
+        let setRadius = unsafeBitCast(blurSymbol, to: SetBlurRadius.self)
+        return { window, radius in
+            guard window.windowNumber > 0 else { return }
+            _ = setRadius(connectionID(), Int32(window.windowNumber), radius)
+        }
+    }()
+}
+
 /// One window (or tab) per document: sidebar + PDFView, a unified toolbar with
 /// a page indicator and a search field, incremental find, and reading-position
 /// memory.
@@ -137,7 +162,7 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         sizeWindowInitially(window)
         buildToolbar()
         configurePageControls()
-        applyWindowOpacity()
+        applyWindowAppearance()
 
         NotificationCenter.default.addObserver(
             self,
@@ -170,26 +195,37 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     private func applyInversion(_ inverted: Bool) {
         sidebarVC.setContentFilters(inverted ? ReaderViewController.makeInvertFilters() : [])
         applyHighlights()
-        applyWindowChrome()
+        applyWindowAppearance()
     }
 
     @objc private func prefsChanged() {
-        applyWindowOpacity()
+        applyWindowAppearance()
     }
 
-    /// Tabs are separate windows, so every controller tints its own.
-    private func applyWindowOpacity() {
-        window?.alphaValue = Prefs.windowOpacity
-    }
-
-    /// In dark mode the title bar and tab bar sit on plain black, matching the
-    /// inverted page paper; the toolbar controls keep their own glass capsules.
-    private func applyWindowChrome() {
+    /// Chrome and translucency in one pass, because they share the window's
+    /// background colour. In dark mode the title bar and tab bar sit on plain
+    /// black, matching the inverted page paper; the toolbar controls keep their
+    /// own glass capsules. Tabs are separate windows, so every controller does
+    /// this for its own.
+    private func applyWindowAppearance() {
         guard let window else { return }
         let dark = window.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         window.titlebarAppearsTransparent = dark
-        window.backgroundColor = dark ? .black : .windowBackgroundColor
         window.titlebarSeparatorStyle = dark ? .none : .automatic
+
+        let opacity = Prefs.windowOpacity
+        let translucent = opacity < Prefs.maxWindowOpacity
+        // Fading the window itself (alphaValue) leaves the desktop behind it
+        // perfectly sharp. Fading only the content leaves the window's own
+        // pixels transparent, and transparent pixels are what the compositor
+        // blurs behind.
+        window.isOpaque = !translucent
+        window.backgroundColor = translucent ? .clear : (dark ? .black : .windowBackgroundColor)
+        if let content = contentViewController?.view {
+            content.wantsLayer = true
+            content.alphaValue = translucent ? opacity : 1
+        }
+        BackdropBlur.apply?(window, translucent && Prefs.windowBlur ? BackdropBlur.radius : 0)
     }
 
     /// Dark mode recolours the matched glyphs green in ReaderPage; light mode
@@ -801,6 +837,9 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
 
         super.showWindow(sender)
+        // The backdrop blur is keyed to the window number, so re-assert it once
+        // the window is actually on screen (and in its tab group).
+        applyWindowAppearance()
         window?.makeFirstResponder(pdfView)
         // A plain PDF is never installed through documentDidReplacePDF, so this
         // is the one chance to read its outline; a Markdown document has no PDF

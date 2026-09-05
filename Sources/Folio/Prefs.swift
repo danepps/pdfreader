@@ -109,6 +109,7 @@ enum Prefs {
         static let markdownFontSize = "markdownFontSize"
         static let sidebarMode = "sidebarMode"
         static let windowOpacity = "windowOpacity"
+        static let windowBlur = "windowBlur"
     }
 
     /// Sizes offered in View ▸ Markdown ▸ Size.
@@ -155,6 +156,16 @@ enum Prefs {
         get { clampOpacity(defaults.object(forKey: Key.windowOpacity) as? Double ?? 1) }
         set {
             defaults.set(clampOpacity(newValue), forKey: Key.windowOpacity)
+            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+        }
+    }
+
+    /// Blur whatever shows through a translucent window, the way Terminal does.
+    /// Only has an effect below full opacity. Default on.
+    static var windowBlur: Bool {
+        get { defaults.object(forKey: Key.windowBlur) as? Bool ?? true }
+        set {
+            defaults.set(newValue, forKey: Key.windowBlur)
             NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
         }
     }
