@@ -480,6 +480,14 @@ Steps 1–4 are kept for setting up any further machine.
 
 ## Gotchas learned the hard way
 
+- **Toolbars that share an identifier are one toolbar.** AppKit synchronises
+  every `NSToolbar` created with the same identifier: `removeItem(at:)` on one
+  window removed the page indicator from every reader window, and every window
+  opened afterwards inherited the stripped set, so the page number "never came
+  back" once a continuous Markdown document had hidden it. Each window now gets
+  `FolioReaderToolbar.<UUID>`; nothing autosaves the configuration, so the
+  identifier is otherwise unused. Go ▸ Go to Page… is also disabled while the
+  indicator is absent instead of flashing into nothing.
 - **A locked screen breaks notarization, and only notarization.** `notarytool`
   keeps its `notary` profile in the data-protection keychain, which locks with
   the screen; the Developer ID identity and the Sparkle key live in the login

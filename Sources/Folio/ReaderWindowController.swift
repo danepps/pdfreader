@@ -323,7 +323,10 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     private func buildToolbar() {
-        let toolbar = NSToolbar(identifier: "FolioReaderToolbar")
+        // Toolbars sharing an identifier are kept in sync by AppKit, so
+        // removing the page indicator for one continuous Markdown window would
+        // strip it from every other window (and every window opened after).
+        let toolbar = NSToolbar(identifier: "FolioReaderToolbar.\(UUID().uuidString)")
         toolbar.delegate = self
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
@@ -869,6 +872,9 @@ final class ReaderWindowController: NSWindowController, NSWindowDelegate, NSTool
         case #selector(showOutline(_:)):
             menuItem.state = sidebarVC.mode == .outline ? .on : .off
             return sidebarVC.hasOutline
+        case #selector(focusPageField(_:)):
+            // A continuous Markdown document has no page indicator to edit.
+            return pageCount > 0 && !folioDocument.isContinuousMarkdown
         default:
             break
         }
