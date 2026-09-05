@@ -2,6 +2,6 @@
 build/
 *.xcodeproj
 .DS_Store
-Support/Folio-partial-Info.plist
+Support/Glassine-partial-Info.plist
 .codex-memo/
 Support/IconConcepts/

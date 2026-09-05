@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Folio</string>
+	<string>Glassine</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -20,7 +20,7 @@
 				<string>com.adobe.pdf</string>
 			</array>
 			<key>NSDocumentClass</key>
-			<string>FolioDocument</string>
+			<string>GlassineDocument</string>
 		</dict>
 		<dict>
 			<key>CFBundleTypeIconFile</key>
@@ -36,21 +36,21 @@
 				<string>net.daringfireball.markdown</string>
 			</array>
 			<key>NSDocumentClass</key>
-			<string>FolioDocument</string>
+			<string>GlassineDocument</string>
 		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
-	<string>Folio</string>
+	<string>Glassine</string>
 	<key>CFBundleIconFile</key>
-	<string>Folio</string>
+	<string>Glassine</string>
 	<key>CFBundleIconName</key>
-	<string>Folio</string>
+	<string>Glassine</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.epps.Folio</string>
+	<string>com.epps.Glassine</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Folio</string>
+	<string>Glassine</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -72,7 +72,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/danepps/pdfreader/main/appcast.xml</string>
+	<string>https://raw.githubusercontent.com/danepps/glassine/main/glassine-appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>xkEJ4pttphM6v/lHQQ4mbSe9JHQZFe1eOefG26iqyWU=</string>
 	<key>UTImportedTypeDeclarations</key>

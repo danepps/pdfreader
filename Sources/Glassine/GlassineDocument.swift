@@ -19,15 +19,15 @@ protocol FindSink: AnyObject {
 /// difference. Because typesetting is asynchronous, the first Markdown render
 /// is just "reload #0": the window opens empty and fills a fraction of a second
 /// later through the same path a file-change reload uses.
-@objc(FolioDocument)
-final class FolioDocument: NSDocument, PDFDocumentDelegate {
+@objc(GlassineDocument)
+final class GlassineDocument: NSDocument, PDFDocumentDelegate {
 
     enum Kind {
         case pdf
         case markdown
     }
 
-    /// macOS does not declare this in CoreTypes, so Folio imports it (see
+    /// macOS does not declare this in CoreTypes, so Glassine imports it (see
     /// UTImportedTypeDeclarations in Info.plist).
     static let markdownType = UTType(importedAs: "net.daringfireball.markdown",
                                      conformingTo: .plainText)
@@ -160,13 +160,13 @@ final class FolioDocument: NSDocument, PDFDocumentDelegate {
            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey]) {
             fileModificationDate = values.contentModificationDate
         }
-        NotificationCenter.default.post(name: .folioDocumentDidReplacePDF,
+        NotificationCenter.default.post(name: .glassineDocumentDidReplacePDF,
                                         object: self,
                                         userInfo: ["initial": initial])
     }
 
     /// Give a rendered Markdown PDF the outline WebKit's print path never
-    /// writes. MarkdownHTML wraps every heading in a `folio-outline://<n>`
+    /// writes. MarkdownHTML wraps every heading in a `glassine-outline://<n>`
     /// anchor, and WebKit *does* emit link annotations, so each annotation
     /// names one heading and says exactly where it landed. The annotations are
     /// removed afterwards: nothing on screen should link to a private scheme.
@@ -177,7 +177,7 @@ final class FolioDocument: NSDocument, PDFDocumentDelegate {
         for pageIndex in 0..<document.pageCount {
             guard let page = document.page(at: pageIndex) else { continue }
             for annotation in page.annotations {
-                guard let url = annotation.url, url.scheme == "folio-outline",
+                guard let url = annotation.url, url.scheme == "glassine-outline",
                       let index = url.host.flatMap(Int.init) else { continue }
                 // A heading that wraps onto two lines gets one annotation per
                 // line; the topmost is where the bookmark should point.
@@ -275,7 +275,7 @@ final class FolioDocument: NSDocument, PDFDocumentDelegate {
         guard !observingPrefs else { return }
         observingPrefs = true
         NotificationCenter.default.addObserver(
-            self, selector: #selector(prefsChanged), name: .folioPrefsChanged, object: nil)
+            self, selector: #selector(prefsChanged), name: .glassinePrefsChanged, object: nil)
     }
 
     @objc private func prefsChanged() {
@@ -319,7 +319,7 @@ final class FolioDocument: NSDocument, PDFDocumentDelegate {
     /// document's own render is not superseded.
     private func pdfDataForExport(_ completion: @escaping (Swift.Result<Data, Error>) -> Void) {
         // Deliberately not the raw render bytes for Markdown: those still carry
-        // the folio-outline:// link annotations and none of the bookmarks.
+        // the glassine-outline:// link annotations and none of the bookmarks.
         // Copying the original bytes keeps a PDF export byte-identical;
         // dataRepresentation() re-serialises and is only the fallback.
         if kind == .pdf, let url = fileURL, let data = try? Data(contentsOf: url) {

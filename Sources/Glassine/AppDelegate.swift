@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        // Before anything reads a preference, and so before a window exists.
+        FolioMigration.runIfNeeded()
         NSApp.mainMenu = MainMenu.build(appDelegate: self)
         // Apply a saved Light/Dark override before any window exists.
         NSApp.appearance = Prefs.appearance.nsAppearance
@@ -74,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         Prefs.markdownFontSize = sender.tag
     }
 
-    /// Open ~/Library/Application Support/Folio/Styles in the Finder, creating
+    /// Open ~/Library/Application Support/Glassine/Styles in the Finder, creating
     /// it the first time, so a custom stylesheet has somewhere obvious to go.
     @objc func openMarkdownStylesFolder(_ sender: NSMenuItem) {
         let folder = MarkdownStyle.folder
@@ -94,17 +96,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
         MainMenu.populateMarkdownStyleMenu(menu, appDelegate: self)
     }
 
-    /// Hand LaunchServices this copy of Folio as the handler for .md files.
+    /// Hand LaunchServices this copy of Glassine as the handler for .md files.
     @objc func makeDefaultMarkdownApp(_ sender: NSMenuItem) {
         NSWorkspace.shared.setDefaultApplication(
             at: Bundle.main.bundleURL,
-            toOpen: FolioDocument.markdownType
+            toOpen: GlassineDocument.markdownType
         ) { error in
             guard let error else { return }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     let alert = NSAlert(error: error)
-                    alert.messageText = "Could not make Folio the default Markdown app."
+                    alert.messageText = "Could not make Glassine the default Markdown app."
                     alert.runModal()
                 }
             }
@@ -115,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
     /// comparison is by bundle identifier, not path: the copy in build/ and the
     /// copy in /Applications are the same app as far as the user is concerned.
     private var isDefaultMarkdownApp: Bool {
-        guard let handler = NSWorkspace.shared.urlForApplication(toOpen: FolioDocument.markdownType),
+        guard let handler = NSWorkspace.shared.urlForApplication(toOpen: GlassineDocument.markdownType),
               let identifier = Bundle(url: handler)?.bundleIdentifier
         else { return false }
         return identifier == Bundle.main.bundleIdentifier
@@ -148,5 +150,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation, 
             break
         }
         return true
+    }
+}
+
+/// Folio became Glassine, which means a new bundle identifier and so a new
+/// preferences domain and a new Application Support folder. On first launch
+/// only, the settings a reader would notice losing are carried across. Nothing
+/// on the Folio side is ever removed: the old app keeps working if it is still
+/// installed, and this is safe to have run more than once.
+enum FolioMigration {
+
+    private static let oldDomain = "com.epps.Folio"
+    private static let doneKey = "migratedFromFolio"
+
+    /// Sparkle's own `SU*` keys are deliberately not among these. Their update
+    /// history belongs to Folio's feed, and Glassine polls a different one.
+    private static let keys = [
+        "invertInDarkMode",
+        "appearance",
+        "lastPositions",
+        "markdownStyle",
+        "markdownFontSize",
+        "markdownLayout",
+        "sidebarMode",
+        "windowOpacity",
+        "windowBlur",
+        "NSWindow Frame ReaderWindow"
+    ]
+
+    static func runIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: doneKey) == nil,
+              let old = defaults.persistentDomain(forName: oldDomain)
+        else { return }
+
+        for key in keys {
+            if let value = old[key] { defaults.set(value, forKey: key) }
+        }
+        copyStyles()
+        defaults.set(true, forKey: doneKey)
+    }
+
+    /// ~/Library/Application Support/Folio/Styles holds whatever custom
+    /// stylesheets the reader wrote; copy the folder wholesale, never move it.
+    private static func copyStyles() {
+        let fm = FileManager.default
+        let destination = MarkdownStyle.folder
+        let source = destination
+            .deletingLastPathComponent()      // .../Glassine
+            .deletingLastPathComponent()      // .../Application Support
+            .appendingPathComponent("Folio/Styles", isDirectory: true)
+        guard fm.fileExists(atPath: source.path),
+              !fm.fileExists(atPath: destination.path)
+        else { return }
+        try? fm.createDirectory(at: destination.deletingLastPathComponent(),
+                                withIntermediateDirectories: true)
+        try? fm.copyItem(at: source, to: destination)
     }
 }

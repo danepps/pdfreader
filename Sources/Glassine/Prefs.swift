@@ -1,12 +1,12 @@
 import AppKit
 
 extension Notification.Name {
-    static let folioPrefsChanged = Notification.Name("FolioPrefsChanged")
-    /// Posted by a FolioDocument (as `object`) once a new PDFDocument has taken
+    static let glassinePrefsChanged = Notification.Name("GlassinePrefsChanged")
+    /// Posted by a GlassineDocument (as `object`) once a new PDFDocument has taken
     /// the place of the old one -- the first Markdown render, a reload after the
     /// file changed on disk, or a typography change. `userInfo["initial"]` is
     /// true for the first render of a window.
-    static let folioDocumentDidReplacePDF = Notification.Name("FolioDocumentDidReplacePDF")
+    static let glassineDocumentDidReplacePDF = Notification.Name("GlassineDocumentDidReplacePDF")
 }
 
 enum AppearanceMode: Int {
@@ -54,13 +54,13 @@ struct MarkdownStyle: Equatable {
         MarkdownStyle(id: "academic", title: "Academic")
     ]
 
-    /// ~/Library/Application Support/Folio/Styles
+    /// ~/Library/Application Support/Glassine/Styles
     static var folder: URL {
         let support = FileManager.default.urls(for: .applicationSupportDirectory,
                                                in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory())
                 .appendingPathComponent("Library/Application Support")
-        return support.appendingPathComponent("Folio/Styles", isDirectory: true)
+        return support.appendingPathComponent("Glassine/Styles", isDirectory: true)
     }
 
     /// The `.css` files in that folder, in name order. Read every time the Style
@@ -120,7 +120,7 @@ enum Prefs {
         get { defaults.object(forKey: Key.invertInDarkMode) as? Bool ?? true }
         set {
             defaults.set(newValue, forKey: Key.invertInDarkMode)
-            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .glassinePrefsChanged, object: nil)
         }
     }
 
@@ -130,7 +130,7 @@ enum Prefs {
         set {
             defaults.set(newValue.rawValue, forKey: Key.appearance)
             NSApp.appearance = newValue.nsAppearance
-            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .glassinePrefsChanged, object: nil)
         }
     }
 
@@ -140,7 +140,7 @@ enum Prefs {
         get { SidebarMode(rawValue: defaults.integer(forKey: Key.sidebarMode)) ?? .thumbnails }
         set {
             defaults.set(newValue.rawValue, forKey: Key.sidebarMode)
-            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .glassinePrefsChanged, object: nil)
         }
     }
 
@@ -156,7 +156,7 @@ enum Prefs {
         get { clampOpacity(defaults.object(forKey: Key.windowOpacity) as? Double ?? 1) }
         set {
             defaults.set(clampOpacity(newValue), forKey: Key.windowOpacity)
-            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .glassinePrefsChanged, object: nil)
         }
     }
 
@@ -166,7 +166,7 @@ enum Prefs {
         get { defaults.object(forKey: Key.windowBlur) as? Bool ?? true }
         set {
             defaults.set(newValue, forKey: Key.windowBlur)
-            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .glassinePrefsChanged, object: nil)
         }
     }
 
@@ -183,7 +183,7 @@ enum Prefs {
         get { defaults.string(forKey: Key.markdownStyle) ?? MarkdownStyle.defaultID }
         set {
             defaults.set(newValue, forKey: Key.markdownStyle)
-            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .glassinePrefsChanged, object: nil)
         }
     }
 
@@ -192,7 +192,7 @@ enum Prefs {
         get { MarkdownLayout(rawValue: defaults.integer(forKey: Key.markdownLayout)) ?? .pages }
         set {
             defaults.set(newValue.rawValue, forKey: Key.markdownLayout)
-            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .glassinePrefsChanged, object: nil)
         }
     }
 
@@ -205,7 +205,7 @@ enum Prefs {
         set {
             guard markdownFontSizes.contains(newValue) else { return }
             defaults.set(newValue, forKey: Key.markdownFontSize)
-            NotificationCenter.default.post(name: .folioPrefsChanged, object: nil)
+            NotificationCenter.default.post(name: .glassinePrefsChanged, object: nil)
         }
     }
 

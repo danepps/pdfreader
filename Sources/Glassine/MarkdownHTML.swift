@@ -37,7 +37,7 @@ struct MarkdownStats: Equatable {
 }
 
 /// One heading of a Markdown document, in document order. `index` is what the
-/// `folio-outline://` anchor in the HTML carries, so a link annotation in the
+/// `glassine-outline://` anchor in the HTML carries, so a link annotation in the
 /// rendered PDF names exactly one heading.
 struct MarkdownHeading {
     var level: Int
@@ -183,7 +183,7 @@ enum MarkdownHTML {
                                             index: index))
             let inner = heading.children.map { HTMLFormatter.format($0) }.joined()
             let level = heading.level
-            return HTMLBlock("<h\(level)><a class=\"fh\" href=\"folio-outline://\(index)\">"
+            return HTMLBlock("<h\(level)><a class=\"fh\" href=\"glassine-outline://\(index)\">"
                              + inner + "</a></h\(level)>\n")
         }
     }

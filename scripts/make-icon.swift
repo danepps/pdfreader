@@ -1,4 +1,4 @@
-// make-icon.swift — generates the Folio app icon artwork as a 1024x1024 PNG.
+// make-icon.swift — generates the Glassine app icon artwork as a 1024x1024 PNG.
 //
 // Usage:
 //   swift make-icon.swift <out.png> [--dark] [--full-bleed]

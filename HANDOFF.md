@@ -1,16 +1,24 @@
-# Folio — Handoff
+# Glassine — Handoff
 
-_Last updated 2026-09-04. Repo: https://github.com/danepps/pdfreader (public
+_Last updated 2026-09-05. Repo: https://github.com/danepps/glassine (public
 since v1.0.0, MIT; see "Signing,
 notarization, updates")._
 
 ## What this is
 
-Folio is Dan Epps's from-scratch native macOS PDF reader, built because PDF
+Glassine is Dan Epps's from-scratch native macOS PDF reader, built because PDF
 Expert got slow. Swift + AppKit + PDFKit. No Electron, no storyboards, no
 Xcode project: a Swift Package plus `build.sh`, which assembles
-`build/Folio.app`. Deployment target macOS 14; developed and tested on
+`build/Glassine.app`. Deployment target macOS 14; developed and tested on
 macOS 26 (Tahoe) with Swift 6.3 / Xcode 26.
+
+**The app was called Folio through 1.1.0** and was renamed to Glassine on
+2026-09-05, bundle id `com.epps.Folio` → `com.epps.Glassine`, GitHub repo
+`danepps/pdfreader` → `danepps/glassine` (GitHub redirects the old name). Notes
+below that describe past work say "Folio" where that is what happened; anything
+naming a file, symbol, identifier or URL is current and says Glassine. The two
+local checkouts keep their old directory names: `~/ClaudeCode/pdf` on the
+MacBook and `~/ClaudeCode/pdfreader` on the Studio.
 
 Dan's stated requirements, all met as of this handoff:
 
@@ -56,7 +64,7 @@ Dan's stated requirements, all met as of this handoff:
   the tree and its nesting for both kinds, an h1→h3 jump, a heading that wraps
   onto two lines yielding one entry, clicking a row navigating, the selection
   following the reading position, the outline refreshing on a file change, and
-  an exported Markdown PDF carrying the bookmarks with no `folio-outline` links
+  an exported Markdown PDF carrying the bookmarks with no `glassine-outline` links
   left. Dark mode checked by screenshot.
 - Window opacity landed 2026-09-04, and blur behind it the same day:
   `Prefs.windowOpacity` (0.3–1.0, default 1) below 1 makes the window
@@ -67,7 +75,7 @@ Dan's stated requirements, all met as of this handoff:
   and disabled at 100%. At exactly 1 the window goes back to opaque with the
   chrome's own background and content alpha 1. All of it is one
   `applyWindowAppearance` — chrome and translucency share the window background
-  colour — applied at init, from `showWindow`, and on `.folioPrefsChanged` so
+  colour — applied at init, from `showWindow`, and on `.glassinePrefsChanged` so
   tabs (separate windows) follow. View ▸ Window Opacity
   is a menu item with a custom view (`OpacityMenuItemView` in `MainMenu.swift`:
   caption, 150 pt continuous slider, live monospaced-digit percentage), plus
@@ -105,7 +113,7 @@ Dan's stated requirements, all met as of this handoff:
   window itself as first responder. If it ever comes back, that is where to look.
 - Markdown styles, continuous layout and word count landed 2026-09-04.
   View ▸ Markdown is now Pages/Continuous, a Style submenu (six built-ins, the
-  `.css` files in `~/Library/Application Support/Folio/Styles`, and "Open
+  `.css` files in `~/Library/Application Support/Glassine/Styles`, and "Open
   Styles Folder…"), and the size list; `MarkdownTypeface` is gone, replaced by
   `Prefs.markdownStyle` (a string id). The window subtitle reads
   "6,433 words · 26 min". Runtime-verified in the built app: every preset
@@ -116,7 +124,7 @@ Dan's stated requirements, all met as of this handoff:
   correctly sized) on the way back to Pages; the outline sidebar listing and
   navigating that single page, with the selection following the reading
   position; ⇧⌘E from a continuous document exporting 22 Letter pages with the
-  bookmarks and no `folio-outline` links; the subtitle updating on a save. The
+  bookmarks and no `glassine-outline` links; the subtitle updating on a save. The
   presets were also judged from the PDFs themselves, light and with the
   inversion filter applied — see the pitfalls below for what that changed.
   Not verified: nothing known.
@@ -137,6 +145,15 @@ Dan's stated requirements, all met as of this handoff:
   bottom-band fix was checked mid-document); the light-mode icon variant
   (would have required toggling Dan's system appearance); Page Up/Down and
   Space paging (left to PDFView's defaults, code-checked only).
+- **Renamed Folio → Glassine 2026-09-05** on branch `glassine`, uncommitted:
+  bundle id, product, `Sources/Glassine`, `GlassineDocument`, the
+  `glassine-outline://` anchor scheme, the notification names, the toolbar and
+  tab identifiers, `~/Library/Application Support/Glassine/Styles`, the icon
+  package and its compiled `Assets.car`, and the feed (below). Version stays
+  1.1.0 / build 4; the first Glassine release is 1.2.0 and Dan cuts it.
+  Runtime-verified on the ad-hoc build: menu bar and About panel, the Folio
+  preference migration, find, the TOC sidebar, the Markdown style menu, the
+  synthesised outline through the renamed scheme, and Export as PDF.
 
 ## Build, run, test
 
@@ -149,41 +166,41 @@ swift scripts/make-doc-icon.swift   # regenerate the Markdown document icon
 ./release.sh 1.0.1         # cut a release (see "Signing, notarization, updates")
 ```
 
-- Repo lives at `~/ClaudeCode/pdf` on one of Dan's machines and `~/ClaudeCode/pdfreader` on the other; use absolute paths from whichever root you're in.
+- Repo lives at `~/ClaudeCode/pdf` on the MacBook and `~/ClaudeCode/pdfreader` on the Studio; both directory names predate the rename and were left alone. Use absolute paths from whichever root you're in.
 - Always run the `.app`, never the bare binary: NSDocument needs Info.plist.
 - Dependencies are Sparkle and swift-markdown; the latter is pinned by commit
   (currently `27b7fc1a`) because its manifest depends on swift-cmark by branch.
   It is source-only Swift + C and links statically, so `build.sh` needs no
   change for it.
 - Force dark/light without touching system settings:
-  `defaults write com.epps.Folio appearance -int 2` (0 system, 1 light,
+  `defaults write com.epps.Glassine appearance -int 2` (0 system, 1 light,
   2 dark), relaunch, then set back to 0.
 - `screencapture -x /abs/path.png` works on this machine for visual checks;
   crop with `sips -c`. GUI keystroke automation via System Events is flaky
-  (keystrokes can land in other apps); guard on Folio being frontmost.
+  (keystrokes can land in other apps); guard on Glassine being frontmost.
 - Test PDFs the agents used live in the session scratchpad and are gone;
   Dan has plenty in ~/Downloads (SCOTUS slip opinions are good: color,
   small caps, lots of matches).
 
-## Architecture (Sources/Folio)
+## Architecture (Sources/Glassine)
 
 | File | Role |
 |---|---|
 | `main.swift` | NSApplication bootstrap, sets `AppDelegate`. |
 | `AppDelegate.swift` | Installs the menu, applies saved appearance override, shows Open panel on launch/no windows, appearance & invert menu actions. Owns the Sparkle `SPUStandardUpdaterController` (started eagerly, so the scheduled background check runs). |
 | `MainMenu.swift` | Entire menu bar in code. Nil-target actions ride the responder chain (`zoomIn:`, `goToNextPage:` etc. are PDFView's). "Open Recent" is just a submenu with a `clearRecentDocuments:` item; AppKit fills it. "Check for Updates…" is the one item with an explicit target — Sparkle's updater controller isn't in the responder chain, so it's passed in from the app delegate. |
-| `FolioDocument.swift` | `NSDocument` (ObjC name `FolioDocument`, referenced from Info.plist) wrapping `PDFDocument`. Two `Kind`s: a PDF is opened directly; a Markdown file is decoded and converted to HTML in `read`, then typeset asynchronously and installed through `.folioDocumentDidReplacePDF`. Owns the `FileWatcher`, the re-render on a style/size/layout change, `applyOutline` (the synthesised Markdown table of contents), the word-count `markdownStats`, `isContinuousMarkdown`, and `exportAsPDF` (which typesets a second, paginated render when the reader is showing a continuous one). `PDFDocumentDelegate`: returns `ReaderPage` for pages, forwards find callbacks to the window controller via `FindSink`. |
-| `MarkdownHTML.swift` | Markdown → HTML. Decode (UTF-8, UTF-16 by BOM), strip YAML front matter, `Markdown.Document` + `HTMLFormatter`, an `ImageInliner` rewriter that turns relative local images into `data:` URIs, a `HeadingAnchorer` rewriter that wraps each heading in an invisible `folio-outline://` anchor and returns the heading list beside the HTML, a `TextCollector` walker behind the word count, and the stylesheet: a base layer of structure driven by CSS variables plus one style layer (six built-ins, or a custom file). Pure Swift, no AppKit, safe off-main. |
+| `GlassineDocument.swift` | `NSDocument` (ObjC name `GlassineDocument`, referenced from Info.plist) wrapping `PDFDocument`. Two `Kind`s: a PDF is opened directly; a Markdown file is decoded and converted to HTML in `read`, then typeset asynchronously and installed through `.glassineDocumentDidReplacePDF`. Owns the `FileWatcher`, the re-render on a style/size/layout change, `applyOutline` (the synthesised Markdown table of contents), the word-count `markdownStats`, `isContinuousMarkdown`, and `exportAsPDF` (which typesets a second, paginated render when the reader is showing a continuous one). `PDFDocumentDelegate`: returns `ReaderPage` for pages, forwards find callbacks to the window controller via `FindSink`. |
+| `MarkdownHTML.swift` | Markdown → HTML. Decode (UTF-8, UTF-16 by BOM), strip YAML front matter, `Markdown.Document` + `HTMLFormatter`, an `ImageInliner` rewriter that turns relative local images into `data:` URIs, a `HeadingAnchorer` rewriter that wraps each heading in an invisible `glassine-outline://` anchor and returns the heading list beside the HTML, a `TextCollector` walker behind the word count, and the stylesheet: a base layer of structure driven by CSS variables plus one style layer (six built-ins, or a custom file). Pure Swift, no AppKit, safe off-main. |
 | `MarkdownRenderer.swift` | `@MainActor` singleton. One offscreen `WKWebView` in a never-shown borderless window; serial job queue (a newer job for the same document supersedes a queued one); prints to a temp PDF and hands back `(Data, PDFDocument)`. A `.continuous` job is measured with `scrollHeight` after it loads and printed onto one page as tall as its content. Tears the web view down 30 s after the last Markdown document closes. |
 | `FileWatcher.swift` | vnode `DispatchSource` on the file *and* its parent directory, 250 ms debounce, `(inode, mtime, size)` gate, reopens the descriptor when the file is replaced or recreated. |
 | `ReaderWindowController.swift` | Window, `NSSplitViewController` (sidebar + reader), unified toolbar, page indicator, search field + hit counter + previous/next match segmented control (⇧⌘G/⌘G equivalents), tabs, reading-position memory, black chrome in dark mode, window translucency and the backdrop blur. |
 | `ReaderViewController.swift` | `ReaderPDFView` (PDFView subclass: arrow-key paging, per-page highlight bookkeeping), appearance routine that installs the inversion filters. |
 | `SidebarViewController.swift` | Two panes behind a segmented control: `PDFThumbnailView` (mirrors the inversion filters) and an `NSOutlineView` table of contents driven from `PDFDocument.outlineRoot`, with `PDFOutline` objects as the items. Clicking a row navigates; `syncSelection()` follows the reading position. The outline is native text and is deliberately *not* filtered. |
 | `ReaderPage.swift` | `PDFPage` subclass; draws dark-mode find highlights. |
-| `Prefs.swift` | UserDefaults: invert toggle, appearance override, per-file last position, Markdown style/layout/size, window opacity and blur. Also `MarkdownStyle`, which enumerates the six built-ins and the `.css` files in `~/Library/Application Support/Folio/Styles` and reads a style's CSS. |
+| `Prefs.swift` | UserDefaults: invert toggle, appearance override, per-file last position, Markdown style/layout/size, window opacity and blur. Also `MarkdownStyle`, which enumerates the six built-ins and the `.css` files in `~/Library/Application Support/Glassine/Styles` and reads a style's CSS. |
 
-Support/: `Info.plist`, `Folio.icon` (Icon Composer package, light+dark),
-`Assets.car` (compiled from it), `Folio.icns` (fallback). scripts/:
+Support/: `Info.plist`, `Glassine.icon` (Icon Composer package, light+dark),
+`Assets.car` (compiled from it), `Glassine.icns` (fallback). scripts/:
 `make-icon.swift` renders both variants, `make-icon.sh` builds icns +
 `.icon` + runs `actool`. The icon (2026-09-04, drawn by Codex) is a page with
 a folded corner and four coloured margin tabs on a graphite tile; the dark
@@ -210,7 +227,7 @@ the rules and the arrow are dropped — there is only room for the M.
 
 Two gotchas. **LaunchServices caches document icons**, so a rebuild changes
 nothing until the bundle is re-registered
-(`…/LaunchServices.framework/Support/lsregister -f build/Folio.app`) and Finder
+(`…/LaunchServices.framework/Support/lsregister -f build/Glassine.app`) and Finder
 is restarted (`killall Finder`); and the icon is taken from whichever bundle
 LaunchServices resolves as the *handler* for `net.daringfireball.markdown`,
 which with a copy in `/Applications` is the installed app, not `build/`.
@@ -269,7 +286,7 @@ tiles are the ones worth tuning.
   asked for boxes (2026-09-04). Light mode uses native
   `highlightedSelections` in systemGreen.
 - **Native `NSWindow` tabbing** (`tabbingMode = .preferred`, identifier
-  `FolioReader`, explicit `addTabbedWindow` in `showWindow`) rather than a
+  `GlassineReader`, explicit `addTabbedWindow` in `showWindow`) rather than a
   custom tab bar. `newWindowForTab:` in the responder chain gives the "+"
   button and ⌘T.
 - **Page indicator** is one attributed label ("4 of 30") that swaps to an
@@ -322,7 +339,7 @@ tiles are the ones worth tuning.
   `--paragraph-gap`, `--text`, `--muted`, `--rule`, `--code-bg`,
   `--code-border`, `--th-bg`, `--link`, `--paper`). A style layer follows it
   and usually does nothing but set those variables: that is all six built-ins
-  are, and a `.css` file in `~/Library/Application Support/Folio/Styles` is
+  are, and a `.css` file in `~/Library/Application Support/Glassine/Styles` is
   dropped in as that layer verbatim, so it can set the variables or override
   any rule. Size stays a separate preference because it is the one thing a
   reader changes without changing the look.
@@ -363,9 +380,9 @@ tiles are the ones worth tuning.
 - **The Markdown outline is synthesised from link annotations.** WebKit's print
   path emits no PDF outline, but it does emit a link annotation for every
   `<a href>`, so `MarkdownHTML`'s `HeadingAnchorer` rewriter wraps each
-  heading's content in `<a class="fh" href="folio-outline://<n>">` and records
+  heading's content in `<a class="fh" href="glassine-outline://<n>">` and records
   `(level, plainText, n)` in the same pass, which is what keeps the numbering
-  and the list from drifting apart. After the render, `FolioDocument.applyOutline`
+  and the list from drifting apart. After the render, `GlassineDocument.applyOutline`
   walks every page's annotations, keys them by the integer in the URL, keeps the
   topmost hit per heading (a heading that wraps yields one annotation per line),
   removes them all, and builds the `PDFOutline` tree with a level stack. An
@@ -375,7 +392,7 @@ tiles are the ones worth tuning.
   comes after the `a { color: #0B57D0 }` rule so the anchor is invisible.
 - **Export re-serialises Markdown.** `pdfDataForExport` hands back
   `pdf.dataRepresentation()` rather than the raw print bytes, because those
-  still carry the `folio-outline://` links and none of the bookmarks; the
+  still carry the `glassine-outline://` links and none of the bookmarks; the
   re-serialised file keeps the outline and drops the annotations. A `.pdf`
   document is still exported byte-identical from the original file.
 - **swift-markdown is pinned by `revision:`.** Its manifest depends on
@@ -385,10 +402,26 @@ tiles are the ones worth tuning.
   centered, `visibilityPriority = .high`; search field 180pt so nothing
   overflows at the default width. The previous/next segmented control sits
   after it (also `.high`), disabled until a search has matches.
+- **Two Sparkle feeds, because the bundle id changed.** `appcast.xml` stays
+  frozen as Folio's final feed and `glassine-appcast.xml` is Glassine's; the
+  reasoning is under "Two feeds, and why" below, and it is the one thing in this
+  repo where duplicating a file is deliberate.
+- **The Folio settings are copied, not moved.** A new bundle id means a new
+  defaults domain and a new Application Support folder, so `FolioMigration` in
+  `AppDelegate.swift` runs once in `applicationWillFinishLaunching` — before
+  anything reads a preference, and so before a window can restore a frame — and
+  copies a named list of keys (`invertInDarkMode`, `appearance`,
+  `lastPositions`, the four Markdown keys, `sidebarMode`, `windowOpacity`,
+  `windowBlur`, `NSWindow Frame ReaderWindow`) out of `com.epps.Folio`, plus the
+  `Styles` folder if Glassine has none yet, then sets `migratedFromFolio`. The
+  list is explicit rather than a whole-domain copy so that Sparkle's `SU*` keys
+  stay behind: they record an update history against a feed Glassine does not
+  read. Nothing is deleted from the Folio side, so an installed Folio keeps
+  working and the migration is safe to re-run against a wiped Glassine domain.
 
 ## Signing, notarization, updates
 
-Folio ships signed, notarized, and self-updating via **Sparkle 2** (SwiftPM
+Glassine ships signed, notarized, and self-updating via **Sparkle 2** (SwiftPM
 dependency, currently 2.9.6).
 
 - `./build.sh` signs with **Developer ID Application: Daniel Epps
@@ -409,22 +442,25 @@ credential profile, and the Sparkle **EdDSA private key** (account `ed25519`,
 created by Sparkle's `generate_keys`). The matching public key is checked into
 `Support/Info.plist` as `SUPublicEDKey`
 (`xkEJ4pttphM6v/lHQQ4mbSe9JHQZFe1eOefG26iqyWU=`) and must never be
-regenerated — doing so orphans every already-installed copy of Folio.
+regenerated — doing so orphans every already-installed copy. The rename did not
+touch it: Glassine signs with the same key Folio did.
 
-**Feed URL:** `https://raw.githubusercontent.com/danepps/pdfreader/main/appcast.xml`
-(`SUFeedURL`). `appcast.xml` lives at the repo root and is generated, not
-hand-written — its entries carry EdDSA signatures that any manual edit breaks.
+**Feed URL:** `https://raw.githubusercontent.com/danepps/glassine/main/glassine-appcast.xml`
+(`SUFeedURL`). `glassine-appcast.xml` lives at the repo root and is generated,
+not hand-written — its entries carry EdDSA signatures that any manual edit
+breaks. It sits beside `appcast.xml`, which is Folio's frozen feed and is not
+Glassine's; see "Two feeds" below.
 **The GitHub repo must be public**: the feed points at release *assets*
-(`https://github.com/danepps/pdfreader/releases/download/v<version>/…`), and
+(`https://github.com/danepps/glassine/releases/download/v<version>/…`), and
 GitHub release assets on a private repo need an auth token Sparkle won't send.
 
 **`./release.sh <version> [notes]`** does the whole release: refuses to run off
 `main` or with a dirty tree, sets `CFBundleShortVersionString` and bumps
 `CFBundleVersion` (an integer, monotonic — it's what Sparkle actually compares),
-runs `build.sh --notarize`, writes `build/releases/Folio-<version>.zip`, stages
-that zip beside a copy of the live `appcast.xml` and runs Sparkle's
-`generate_appcast` over the staging directory so new entries merge into the old
-ones, copies the feed back, then commits, tags `v<version>`, pushes the tag,
+runs `build.sh --notarize`, writes `build/releases/Glassine-<version>.zip`, stages
+that zip beside a copy of the live `glassine-appcast.xml` and runs Sparkle's
+`generate_appcast -o` over the staging directory so new entries merge into the
+old ones, copies the feed back, then commits, tags `v<version>`, pushes the tag,
 runs `gh release create` (so the asset exists), and only then pushes `main`
 (which is what makes the feed live). Preflight refuses a dirty tree, a
 `main` that differs from `origin/main`, an existing tag, a version not newer
@@ -433,6 +469,23 @@ fails after the tag push, the recovery commands are in a comment above the
 publish step (delete the tag locally and remotely, delete the GitHub release
 if it exists, `reset --hard origin/main`, rerun). Don't hand-run the pieces;
 the appcast signature and the download URL prefix have to agree with the tag.
+The `-o` flag is what keeps it writing `glassine-appcast.xml` rather than
+`generate_appcast`'s default `appcast.xml`, which would clobber Folio's feed.
+
+### Two feeds, and why
+
+`appcast.xml` is **Folio's, frozen at 1.1.0**. Every installed Folio polls
+`raw.githubusercontent.com/danepps/pdfreader/main/appcast.xml`, which GitHub
+still redirects into this repo after the repo rename, so that file has to keep
+existing and keep saying 1.1.0. Glassine has a different bundle identifier, and
+Sparkle would happily install a "1.2.0" over a Folio that is a different app
+with a different preferences domain — the update would look like an upgrade and
+would silently be a swap. So Glassine gets its own file,
+`glassine-appcast.xml`, and the two never merge. Neither is signed differently:
+the EdDSA key is shared, so a stale Folio would accept a Glassine build if it
+were ever offered one. It must not be. Practical consequence: the copies of
+Folio already in `/Applications` are replaced by hand, once, and never update
+again. Do not add an entry to `appcast.xml` and do not point `release.sh` at it.
 
 ### Signing on both Macs
 
@@ -470,9 +523,9 @@ Steps 1–4 are kept for setting up any further machine.
    Verify: `xcrun notarytool history --keychain-profile notary`.
 5. **Sparkle EdDSA key.** The artifact path only exists after a first
    `./build.sh` has resolved the package. On this Mac:
-   `~/ClaudeCode/pdfreader/.build/artifacts/sparkle/Sparkle/bin/generate_keys -x ~/folio_eddsa_key`.
+   `~/ClaudeCode/pdfreader/.build/artifacts/sparkle/Sparkle/bin/generate_keys -x ~/glassine_eddsa_key`.
    Transfer privately, then on the MacBook:
-   `~/ClaudeCode/pdf/.build/artifacts/sparkle/Sparkle/bin/generate_keys -f ~/folio_eddsa_key`
+   `~/ClaudeCode/pdf/.build/artifacts/sparkle/Sparkle/bin/generate_keys -f ~/glassine_eddsa_key`
    and delete the file on both machines. Do **not** run bare `generate_keys`
    there — it would mint a second key that no shipped app trusts.
 6. **End to end:** `./build.sh --notarize` should finish with `accepted` and
@@ -491,7 +544,7 @@ Steps 1–4 are kept for setting up any further machine.
   window removed the page indicator from every reader window, and every window
   opened afterwards inherited the stripped set, so the page number "never came
   back" once a continuous Markdown document had hidden it. Each window now gets
-  `FolioReaderToolbar.<UUID>`; nothing autosaves the configuration, so the
+  `GlassineReaderToolbar.<UUID>`; nothing autosaves the configuration, so the
   identifier is otherwise unused. Go ▸ Go to Page… is also disabled while the
   indicator is absent instead of flashing into nothing.
 - **A locked screen breaks notarization, and only notarization.** `notarytool`
@@ -570,7 +623,7 @@ Steps 1–4 are kept for setting up any further machine.
 - **Set the `PDFDocumentDelegate` before anything touches a page.** PDFKit calls
   `classForPage` lazily, and a page vended before the delegate is in place is a
   plain `PDFPage` forever -- it can never draw dark-mode find highlights. In
-  `FolioDocument.install` the delegate assignment comes first.
+  `GlassineDocument.install` the delegate assignment comes first.
 - **`restoreFinished` must go false across a document swap.** Assigning a new
   document makes `PDFView` lay out and report page 1, and the position saver
   would write that over the place the reader was.
@@ -618,8 +671,8 @@ Steps 1–4 are kept for setting up any further machine.
   bundle has been registered; `mdls -name kMDItemContentType foo.md` should then
   say `net.daringfireball.markdown`.
 - **The default-app checkmark compares bundle identifiers, not paths.**
-  LaunchServices resolves `com.epps.Folio` to whichever copy it likes -- setting
-  the default from `build/Folio.app` reported `/Applications/Folio.app` back --
+  LaunchServices resolves `com.epps.Glassine` to whichever copy it likes -- setting
+  the default from `build/Glassine.app` reported `/Applications/Glassine.app` back --
   so a path comparison would show the item unchecked right after checking it.
 - XML comments cannot contain `--`. The hand-written `appcast.xml` skeleton
   tripped `generate_appcast`'s parser on exactly that.
@@ -636,8 +689,14 @@ Steps 1–4 are kept for setting up any further machine.
   it). Scratch files go in the session scratchpad, not the repo.
 - Repo git email is set locally to dsepps@gmail.com (global is a
   placeholder). Commit/push only when he asks; he has asked for pushes here.
-- App name "Folio" and bundle id `com.epps.Folio` were my picks; rename is
-  a find-and-replace plus `Support/Info.plist` and the icon script.
+- The app was "Folio" (bundle id `com.epps.Folio`) until Dan renamed it to
+  Glassine on 2026-09-05. A further rename is a case-sensitive find-and-replace
+  over `Sources/`, `Support/Info.plist`, `build.sh`, `release.sh` and
+  `Package.swift`, plus `scripts/make-icon.sh` (which names the `.icon` package
+  and regenerates `Assets.car`), the feed file, and a migration like
+  `FolioMigration` — the bundle id is what makes it a new app to macOS.
+- Two files still say "Folio" on purpose: `appcast.xml` (Folio's frozen feed)
+  and `AI Memos/folio-code-review-2026-09-04-Codex-GPT-5.md` (a dated record).
 
 ## Known quirks / candidates for next work
 

@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Build Folio.app into ./build.
+# Build Glassine.app into ./build.
 # Usage: ./build.sh [--run] [--debug] [--adhoc] [--notarize]
 set -euo pipefail
 ROOT="${0:A:h}"
@@ -24,14 +24,14 @@ echo "==> $CONFIG build, $([[ $ADHOC -eq 1 ]] && echo ad-hoc || echo 'Developer 
 
 swift build -c "$CONFIG" --package-path "$ROOT"
 
-APP="$ROOT/build/Folio.app"
+APP="$ROOT/build/Glassine.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$ROOT/.build/$CONFIG/Folio" "$APP/Contents/MacOS/Folio"
+cp "$ROOT/.build/$CONFIG/Glassine" "$APP/Contents/MacOS/Glassine"
 cp "$ROOT/Support/Info.plist" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
-if [[ -f "$ROOT/Support/Folio.icns" ]]; then
-  cp "$ROOT/Support/Folio.icns" "$APP/Contents/Resources/Folio.icns"
+if [[ -f "$ROOT/Support/Glassine.icns" ]]; then
+  cp "$ROOT/Support/Glassine.icns" "$APP/Contents/Resources/Glassine.icns"
 fi
 if [[ -f "$ROOT/Support/MarkdownDocument.icns" ]]; then
   cp "$ROOT/Support/MarkdownDocument.icns" "$APP/Contents/Resources/MarkdownDocument.icns"
@@ -91,7 +91,7 @@ if [[ $NOTARIZE -eq 1 ]]; then
   if [[ -z "$IDENTITY" || $ADHOC -eq 1 ]]; then
     echo "--notarize needs a Developer ID signature" >&2; exit 1
   fi
-  ZIP="$ROOT/build/Folio-notarize.zip"
+  ZIP="$ROOT/build/Glassine-notarize.zip"
   rm -f "$ZIP"
   ditto -c -k --keepParent "$APP" "$ZIP"
   xcrun notarytool submit "$ZIP" --keychain-profile notary --wait

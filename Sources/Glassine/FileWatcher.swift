@@ -26,7 +26,7 @@ final class FileWatcher {
 
     /// Delivered on the main actor.
     private let onChange: @MainActor @Sendable () -> Void
-    private let queue = DispatchQueue(label: "com.epps.Folio.FileWatcher")
+    private let queue = DispatchQueue(label: "com.epps.Glassine.FileWatcher")
 
     // Everything below is touched only on `queue` (or before it starts).
     private var url: URL

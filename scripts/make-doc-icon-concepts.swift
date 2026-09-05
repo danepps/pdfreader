@@ -408,7 +408,7 @@ let board = context(width: boardW, height: boardH)
 board.setFillColor(rgb(238, 241, 245))
 board.fill(CGRect(x: 0, y: 0, width: CGFloat(boardW), height: CGFloat(boardH)))
 
-label("Folio — Markdown document icon concepts", at: CGPoint(x: 100, y: 3470),
+label("Glassine — Markdown document icon concepts", at: CGPoint(x: 100, y: 3470),
       size: 62, bold: true, color: rgb(26, 33, 43), in: board)
 label("Transparent document sheets · six directions · light and dark at 512, 128, 64 and 32 px",
       at: CGPoint(x: 102, y: 3400), size: 30, color: rgb(94, 104, 118), in: board)

@@ -61,8 +61,8 @@ enum MainMenu {
 
     private static func appMenu(appDelegate: AppDelegate,
                                 updater: SPUStandardUpdaterController) -> NSMenu {
-        let menu = NSMenu(title: "Folio")
-        add(menu, "About Folio", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
+        let menu = NSMenu(title: "Glassine")
+        add(menu, "About Glassine", #selector(NSApplication.orderFrontStandardAboutPanel(_:)))
         menu.addItem(.separator())
         // Explicit target: Sparkle's controller is not in the responder chain.
         add(menu, "Check for Updates…",
@@ -70,15 +70,15 @@ enum MainMenu {
         menu.addItem(.separator())
         // Explicit target: the app delegate is in the responder chain, but only
         // behind the document, and this item is about the app, not a document.
-        add(menu, "Use Folio to Open Markdown Files",
+        add(menu, "Use Glassine to Open Markdown Files",
             #selector(AppDelegate.makeDefaultMarkdownApp(_:)), target: appDelegate)
         menu.addItem(.separator())
-        add(menu, "Hide Folio", #selector(NSApplication.hide(_:)), key: "h")
+        add(menu, "Hide Glassine", #selector(NSApplication.hide(_:)), key: "h")
         add(menu, "Hide Others", #selector(NSApplication.hideOtherApplications(_:)),
             key: "h", modifiers: [.command, .option])
         add(menu, "Show All", #selector(NSApplication.unhideAllApplications(_:)))
         menu.addItem(.separator())
-        add(menu, "Quit Folio", #selector(NSApplication.terminate(_:)), key: "q")
+        add(menu, "Quit Glassine", #selector(NSApplication.terminate(_:)), key: "q")
         return menu
     }
 
@@ -101,7 +101,7 @@ enum MainMenu {
         add(menu, "Print…", #selector(NSDocument.printDocument(_:)), key: "p")
         menu.addItem(.separator())
         // ⇧⌘E because ⌘E is Use Selection for Find.
-        add(menu, "Export as PDF…", #selector(FolioDocument.exportAsPDF(_:)),
+        add(menu, "Export as PDF…", #selector(GlassineDocument.exportAsPDF(_:)),
             key: "e", modifiers: [.command, .shift])
         return menu
     }
@@ -201,7 +201,7 @@ enum MainMenu {
     }
 
     /// Marks the one menu the app delegate rebuilds in `menuNeedsUpdate`.
-    static let markdownStyleMenuIdentifier = NSUserInterfaceItemIdentifier("folio.markdownStyle")
+    static let markdownStyleMenuIdentifier = NSUserInterfaceItemIdentifier("glassine.markdownStyle")
 
     /// Fill View ▸ Markdown ▸ Style: the built-ins, then whatever `.css` files
     /// are in the Styles folder right now, then the way to that folder. The
