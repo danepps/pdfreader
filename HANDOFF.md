@@ -144,7 +144,8 @@ Dan's stated requirements, all met as of this handoff:
 ./build.sh --run           # release build + launch (run from repo root)
 ./build.sh --debug         # debug config
 ./build.sh --adhoc         # skip Developer ID signing (offline, no keychain)
-./scripts/make-icon.sh     # regenerate icon assets
+./scripts/make-icon.sh     # regenerate app icon assets
+swift scripts/make-doc-icon.swift   # regenerate the Markdown document icon
 ./release.sh 1.0.1         # cut a release (see "Signing, notarization, updates")
 ```
 
@@ -189,6 +190,34 @@ a folded corner and four coloured margin tabs on a graphite tile; the dark
 variant flips the page to black. `scripts/make-icon-concepts.swift` renders
 the alternatives that were considered into `Support/IconConcepts/` (gitignored,
 ~57 MB).
+
+The **Markdown document icon** (the Finder icon for a `.md` file) is separate:
+`swift scripts/make-doc-icon.swift` writes the committed
+`Support/MarkdownDocument.icns` (10 entries, 16–512 pt at 1× and 2×), which
+`build.sh` copies into `Contents/Resources` and `Info.plist` names twice —
+`CFBundleTypeIconFile` on the Markdown `CFBundleDocumentTypes` entry and
+`UTTypeIconFile` on the imported UTI. It is a bare sheet with the app icon's
+folded corner, slate rules and four coloured margin tabs, plus a bold M↓;
+only the *light* variant is shipped, because Finder draws one document icon
+whatever the appearance is. `scripts/make-doc-icon-concepts.swift` stays as the
+exploratory script (six directions into `Support/IconConcepts/Doc/`). Each size
+is drawn at its own resolution rather than downsampled, and 16 and 32 px are
+hand-tuned in `tuning(for:)`: the sheet is zoomed to fill the tile, edges and
+rules snap to whole pixels, the mark's stem is forced to 2 px (the
+proportional 0.25 × height lands under a pixel and greys out), tab positions
+come from one rounded pitch rather than four rounded positions, and at 16 px
+the rules and the arrow are dropped — there is only room for the M.
+
+Two gotchas. **LaunchServices caches document icons**, so a rebuild changes
+nothing until the bundle is re-registered
+(`…/LaunchServices.framework/Support/lsregister -f build/Folio.app`) and Finder
+is restarted (`killall Finder`); and the icon is taken from whichever bundle
+LaunchServices resolves as the *handler* for `net.daringfireball.markdown`,
+which with a copy in `/Applications` is the installed app, not `build/`.
+**Finder icon view shows a QuickLook text preview for `.md`, not the document
+icon** (icon previews are on by default), so the icon shows up in list and
+column view, Open/Save panels and the Dock — which is why the 16 and 32 px
+tiles are the ones worth tuning.
 
 ## Design decisions and why
 

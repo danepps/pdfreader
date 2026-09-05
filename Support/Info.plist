@@ -23,6 +23,8 @@
 			<string>FolioDocument</string>
 		</dict>
 		<dict>
+			<key>CFBundleTypeIconFile</key>
+			<string>MarkdownDocument</string>
 			<key>CFBundleTypeName</key>
 			<string>Markdown Document</string>
 			<key>CFBundleTypeRole</key>
@@ -82,6 +84,8 @@
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Markdown Document</string>
+			<key>UTTypeIconFile</key>
+			<string>MarkdownDocument.icns</string>
 			<key>UTTypeIdentifier</key>
 			<string>net.daringfireball.markdown</string>
 			<key>UTTypeTagSpecification</key>
